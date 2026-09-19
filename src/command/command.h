@@ -8,5 +8,4 @@ class Command
 public:
     string name_;
     vector<string> args_;
-    Command();
 };
