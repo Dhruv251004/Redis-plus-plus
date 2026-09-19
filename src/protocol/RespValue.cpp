@@ -45,3 +45,8 @@ bool RespValue::isError() const
 {
     return type_ == Type::Error;
 }
+
+const string &RespValue::Serialize() const
+{
+    
+}
