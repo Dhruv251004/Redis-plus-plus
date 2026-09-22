@@ -1,7 +1,6 @@
-#include <iostream>
 #include "RespValue.h"
 #include "RespParser.h"
-#include "ParserUtils.h"
+#include "utility/ParserUtils.h"
 using namespace std;
 
 RespValue RespParser::parse(string_view buffer)
@@ -52,9 +51,7 @@ RespValue RespParser::parse(string_view buffer)
 
 RespValue RespParser::parse_bulk_string(string_view s)
 {
-    int len = s.size();
     int ptr = 0;
-
     if (!expect(s, ptr, "$"))
         return RespValue::error("ERR expected bulk string");
 

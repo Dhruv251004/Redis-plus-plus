@@ -4,11 +4,12 @@ using namespace std;
 
 bool expect(std::string_view buffer, int &ptr, std::string_view toRead)
 {
+    int len = buffer.size();
     int start = ptr;
 
     for (char c : toRead)
     {
-        if (ptr >= buffer.size() || buffer[ptr] != c)
+        if (ptr >= len || buffer[ptr] != c)
         {
             ptr = start; // rollback on failure
             return false;
@@ -21,12 +22,13 @@ bool expect(std::string_view buffer, int &ptr, std::string_view toRead)
 
 optional<int> readNum(string_view buffer, int &ptr)
 {
-    if (ptr >= buffer.size() || !isdigit(static_cast<unsigned char>(buffer[ptr])))
+    int len = buffer.size();
+    if (ptr >= len || !isdigit(static_cast<unsigned char>(buffer[ptr])))
         return nullopt;
 
     int num = 0;
 
-    while (ptr < buffer.size() && isdigit(static_cast<unsigned char>(buffer[ptr])))
+    while (ptr < len && isdigit(static_cast<unsigned char>(buffer[ptr])))
     {
         num = num * 10 + (buffer[ptr] - '0');
         ptr++;

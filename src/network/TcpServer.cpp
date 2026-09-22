@@ -34,20 +34,17 @@ bool TcpServer::start()
     return true;
 }
 
-bool TcpServer::accept_client()
+int TcpServer::accept_client()
 {
-    return accept(server_socket_, nullptr, nullptr) != -1;
+    return accept(server_socket_, nullptr, nullptr);
 }
 
 optional<string> TcpServer::receive_message(int client_id)
 {
     char buffer[1024];
-
     ssize_t bytes = recv(client_id, buffer, sizeof(buffer), 0);
-
     if (bytes <= 0)
         return nullopt;
-
     return string(buffer, bytes);
 }
 
@@ -64,6 +61,11 @@ bool TcpServer::send_message(int client_id, string_view msg)
     }
 
     return true;
+}
+
+bool TcpServer::close_client(int client_id)
+{
+    return close(client_id) == 0;
 }
 
 void TcpServer::stop()

@@ -1,5 +1,5 @@
 #include <iostream>
-#include "RespValue.h"
+#include "protocol/RespValue.h"
 #include "CommandExecutor.h"
 #include "utility/stringUtils.h"
 // #include
@@ -8,7 +8,7 @@ using namespace std;
 const unordered_map<string, CommandExecutor::Handler> CommandExecutor::commandMap = {
     {"PING", CommandExecutor::handle_ping},
     {"ECHO", CommandExecutor::handle_echo},
-    {"SET", CommandExecutor::handle_set},
+    // {"SET", CommandExecutor::handle_set},
 };
 
 RespValue CommandExecutor::execute(const RespValue &resp)
@@ -48,10 +48,10 @@ RespValue CommandExecutor::handle_echo(const vector<RespValue> &args)
     return RespValue::bulk_string(args[0].data());
 }
 
-RespValue CommandExecutor::handle_set(const vector<RespValue> &args)
-{
-    // some processing
-}
+// RespValue CommandExecutor::handle_set(const vector<RespValue> &args)
+// {
+//     // some processing
+// }
 
 RespValue CommandExecutor::unknown_command(string_view cmd)
 {

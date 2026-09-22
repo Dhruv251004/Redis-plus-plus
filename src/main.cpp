@@ -1,17 +1,12 @@
 #include <iostream>
 #include <sys/socket.h>
-#include "network/TcpServer.h"
+#include "server/RedisServer.h"
 
 using namespace std;
 
 int main()
 {
-    TcpServer server(6379);
-    server.start();
-    int client_socket = server.accept_client();
-
-    string buffer;
-    recv(client_socket, &buffer, sizeof(buffer), 0);
-    cout << "Message from client: " << buffer << endl;
+    RedisServer *server = new RedisServer(6379);
+    server->start();
     return 0;
 }

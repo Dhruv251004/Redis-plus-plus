@@ -9,6 +9,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_executable(redispp
     src/main.cpp
     src/network/TcpServer.cpp
+    src/protocol/RespParser.cpp
+    src/protocol/RespSerializer.cpp
+    src/protocol/RespValue.cpp
+    src/command/CommandExecutor.cpp
+    src/server/RedisServer.cpp
+    src/utility/
 )
 
 target_include_directories(redispp PRIVATE
