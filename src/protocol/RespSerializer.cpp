@@ -2,21 +2,49 @@
 
 string RespSerializer::serialize(const RespValue &res)
 {
-    string serialzied_res;
+    string serialized_res;
     if (res.type() == RespValue::Type::SimpleString)
-        serialzied_res = "+" + res.data() + "\r\n";
+        serialized_res = serialize_simple_string(res.data());
     else if (res.type() == RespValue::Type::BulkString)
-        serialzied_res = "$" + to_string(res.data().size()) + "\r\n" + res.data() + "\r\n";
+        serialized_res = serialize_bulk_string(res.data());
     else if (res.type() == RespValue::Type::Array)
     {
         const vector<RespValue> &children = res.children();
-        serialzied_res = "*" + to_string(children.size());
-        serialzied_res += "\r\n";
+        serialized_res = "*" + to_string(children.size());
+        serialized_res += "\r\n";
         for (const auto &child : children)
-            serialzied_res += serialize(child);
+            serialized_res += serialize(child);
     }
     else if (res.type() == RespValue::Type::Error)
-        serialzied_res = "-" + res.data() + "\r\n";
+        serialized_res = serialize_error(res.data());
+    else
+        serialized_res = serialize_error("ERR unsupported response type");
 
-    return serialzied_res;
+    return serialized_res;
+}
+
+string RespSerializer::serialize_simple_string(string_view data)
+{
+    string res = "+";
+    res += data;
+    res += "\r\n";
+    return res;
+}
+
+string RespSerializer::serialize_bulk_string(string_view data)
+{
+    string res = "$";
+    res += to_string(data.size());
+    res += "\r\n";
+    res += data;
+    res += "\r\n";
+    return res;
+}
+
+string RespSerializer::serialize_error(string_view data)
+{
+    string res = "-";
+    res += data;
+    res += "\r\n";
+    return res;
 }
