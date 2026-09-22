@@ -17,7 +17,6 @@ public:
     };
 
     RespValue(Type, string_view);
-    const string &Serialize() const;
     static RespValue simple_string(string_view);
     static RespValue bulk_string(string_view);
     static RespValue array(vector<RespValue>);
