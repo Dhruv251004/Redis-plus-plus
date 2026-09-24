@@ -2,7 +2,7 @@
 
 void ConnectionManager::add(int fd)
 {
-    connections_[fd] = Connection(fd);
+    connections_.try_emplace(fd, fd);
 }
 
 void ConnectionManager::remove(int fd)
