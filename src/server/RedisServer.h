@@ -1,4 +1,5 @@
 #include "network/TcpServer.h"
+#include "ConnectionManager.h"
 #pragma once
 
 class RedisServer
@@ -11,4 +12,5 @@ public:
 
 private:
     TcpServer tcp_server_;
+    ConnectionManager connection_manager_;
 };

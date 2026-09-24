@@ -17,11 +17,13 @@ void RedisServer::start()
     while (true)
     {
         int client_id = tcp_server_.accept_client();
+        connection_manager_.add(client_id);
         if (client_id != -1)
         {
             handle_client(client_id);
             if (tcp_server_.close_client(client_id))
             {
+                connection_manager_.remove(client_id);
                 cout << "client disconnected\n";
             }
             else
