@@ -17,6 +17,8 @@ string RespSerializer::serialize(const RespValue &res)
     }
     else if (res.type() == RespValue::Type::Error)
         serialized_res = serialize_error(res.data());
+    else if (res.type() == RespValue::Type::NullBulkString)
+        serialized_res = serialize_null_bulk_string();
     else
         serialized_res = serialize_error("ERR unsupported response type");
 
