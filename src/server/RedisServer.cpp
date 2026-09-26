@@ -63,6 +63,7 @@ void RedisServer::start()
 
                 epoll_event client_ev{};
                 client_ev.events = EPOLLIN;
+                client_ev.data.fd = client_fd;
                 if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, client_fd, &client_ev) == -1)
                 {
                     cerr << "Failed to add client socket to epoll\n";
