@@ -6,12 +6,13 @@
 #include "command/CommandExecutor.h"
 #include "protocol/RespSerializer.h"
 #include "protocol/ParseResult.h"
+#include "database/Database.h"
 
 using namespace std;
 
 constexpr int MAX_EVENTS = 64;
 
-RedisServer::RedisServer(int port) : tcp_server_(port) {}
+RedisServer::RedisServer(int port) : tcp_server_(port), db_(), command_executor_(db_) {}
 
 void RedisServer::start()
 {
@@ -105,7 +106,7 @@ void RedisServer::handle_client(int client_fd)
             }
 
             conn.consume(consumed);
-            RespValue output_resp = CommandExecutor::execute(*input_resp);
+            RespValue output_resp = command_executor_.execute(*input_resp);
             string output_msg = RespSerializer::serialize(output_resp);
 
             if (!tcp_server_.send_message(client_fd, output_msg))

@@ -48,3 +48,8 @@ string RespSerializer::serialize_error(string_view data)
     res += "\r\n";
     return res;
 }
+
+string RespSerializer::serialize_null_bulk_string()
+{
+    return "$-1\r\n";
+}

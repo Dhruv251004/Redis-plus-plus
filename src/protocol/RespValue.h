@@ -14,6 +14,7 @@ public:
         Error,
         Integer,
         Array,
+        NullBulkString,
         Null
     };
 
@@ -21,6 +22,7 @@ public:
     static RespValue simple_string(string_view);
     static RespValue bulk_string(string_view);
     static RespValue array(vector<RespValue>);
+    static RespValue null_bulk_string();
     static RespValue error(const string &);
 
     Type type() const;

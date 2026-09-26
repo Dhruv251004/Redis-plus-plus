@@ -1,15 +1,19 @@
 #include <iostream>
 #include "protocol/RespValue.h"
 #include "CommandExecutor.h"
-#include "utility/stringUtils.h"
+#include "utility/StringUtils.h"
 // #include
 using namespace std;
 
-const unordered_map<string, CommandExecutor::Handler> CommandExecutor::commandMap = {
-    {"PING", CommandExecutor::handle_ping},
-    {"ECHO", CommandExecutor::handle_echo},
-    // {"SET", CommandExecutor::handle_set},
-};
+CommandExecutor::CommandExecutor(Database &db) : db_(db)
+{
+    command_map_ = {
+        {"PING", &CommandExecutor::handle_ping},
+        {"ECHO", &CommandExecutor::handle_echo},
+        {"GET", &CommandExecutor::handle_get},
+        {"SET", &CommandExecutor::handle_set},
+    };
+}
 
 RespValue CommandExecutor::execute(const RespValue &resp)
 {
@@ -25,12 +29,12 @@ RespValue CommandExecutor::execute(const RespValue &resp)
         return RespValue::error("ERR invalid command name");
 
     string cmdName = uppercase(cmd.data());
-    auto it = commandMap.find(cmdName);
-    if (it == commandMap.end())
+    auto it = command_map_.find(cmdName);
+    if (it == command_map_.end())
         return unknown_command(cmdName);
 
     vector<RespValue> args(children.begin() + 1, children.end());
-    return it->second(args);
+    return (this->*(it->second))(args);
 }
 
 RespValue CommandExecutor::handle_ping(const vector<RespValue> &args)
@@ -48,9 +52,36 @@ RespValue CommandExecutor::handle_echo(const vector<RespValue> &args)
     return RespValue::bulk_string(args[0].data());
 }
 
-// RespValue CommandExecutor::handle_set(const vector<RespValue> &args)
+RespValue CommandExecutor::handle_set(const vector<RespValue> &args)
+{
+    if (args.size() != 2)
+        return wrong_arg_count("SET");
+    string key = args[0].data();
+    string value = args[1].data();
+    db_.set(key, value);
+
+    return RespValue::simple_string("OK");
+}
+
+RespValue CommandExecutor::handle_get(const vector<RespValue> &args)
+{
+    if (args.size() != 1)
+        return wrong_arg_count("GET");
+    string key = args[0].data();
+    auto value = db_.get(key);
+    if (!value.has_value())
+        return RespValue::null_bulk_string();
+    return RespValue::bulk_string(*value);
+}
+
+// RespValue CommandExecutor::handle_del(const vector<RespValue> &args)
 // {
-//     // some processing
+//     if (args.size() != 1)
+//         return wrong_arg_count("DEL");
+//     string key = args[0].data();
+//     db_.del(key);
+
+//     return RespValue::
 // }
 
 RespValue CommandExecutor::unknown_command(string_view cmd)

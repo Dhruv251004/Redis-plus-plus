@@ -16,6 +16,7 @@ add_executable(redispp
     src/command/CommandExecutor.cpp
     src/server/RedisServer.cpp
     src/server/ConnectionManager.cpp
+    src/database/Database.cpp
     src/utility/
 )
 

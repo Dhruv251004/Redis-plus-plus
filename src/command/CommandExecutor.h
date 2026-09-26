@@ -1,21 +1,27 @@
 #pragma once
-#include "protocol/RespValue.h"
 #include <unordered_map>
 #include <vector>
+#include "protocol/RespValue.h"
+#include "database/Database.h"
+using namespace std;
 
 class CommandExecutor
 {
 public:
-    static RespValue execute(const RespValue &);
+    CommandExecutor(Database &);
+    RespValue execute(const RespValue &);
 
 private:
-    using Handler = RespValue (*)(const vector<RespValue> &);
-    static const unordered_map<string, Handler> commandMap;
+    using Handler = RespValue (CommandExecutor::*)(const vector<RespValue> &);
+    unordered_map<string, Handler> command_map_;
+    Database &db_;
 
-    static RespValue handle_ping(const vector<RespValue> &);
-    static RespValue handle_echo(const vector<RespValue> &);
-    // static RespValue handle_set(const vector<RespValue> &);
-
-    static RespValue unknown_command(std::string_view);
-    static RespValue wrong_arg_count(std::string_view);
+    RespValue handle_ping(const vector<RespValue> &);
+    RespValue handle_echo(const vector<RespValue> &);
+    RespValue handle_set(const vector<RespValue> &);
+    RespValue handle_get(const vector<RespValue> &);
+    // static RespValue handle_del(const vector<RespValue> &);
+    // static RespValue handle_contains(const vector<RespValue> &);
+    RespValue unknown_command(string_view);
+    RespValue wrong_arg_count(string_view);
 };

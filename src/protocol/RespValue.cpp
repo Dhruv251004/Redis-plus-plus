@@ -21,6 +21,12 @@ RespValue RespValue::array(vector<RespValue> values)
     return v;
 }
 
+RespValue RespValue::null_bulk_string()
+{
+    RespValue v(Type::NullBulkString, "");
+    return v;
+}
+
 RespValue RespValue::error(const string &msg)
 {
     return RespValue(Type::Error, msg);
