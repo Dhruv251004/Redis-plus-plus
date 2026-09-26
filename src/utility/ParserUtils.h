@@ -6,7 +6,6 @@ using namespace std;
 ParseStatus expect(std::string_view buffer, int &ptr, std::string_view toRead)
 {
     int len = buffer.size();
-    int start = ptr;
 
     for (char c : toRead)
     {

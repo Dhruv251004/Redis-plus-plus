@@ -52,6 +52,8 @@ ParseResult RespParser::parse(string_view buffer)
 
 ParseResult RespParser::parse_bulk_string(string_view s, int &ptr)
 {
+    int len = s.size();
+
     ParseStatus status = expect(s, ptr, "$");
     if (status == ParseStatus::Invalid)
         return ParseResult(status, RespValue::error("ERR expected bulk string"), ptr);
@@ -70,7 +72,7 @@ ParseResult RespParser::parse_bulk_string(string_view s, int &ptr)
     if (status == ParseStatus::Incomplete)
         return ParseResult(status, nullopt, 0);
 
-    if (ptr + num > s.size())
+    if (ptr + num > len)
         return ParseResult(ParseStatus::Incomplete, nullopt, 0);
 
     string data = readString(s, ptr, num);
