@@ -1,6 +1,7 @@
+#pragma once
+#include <sys/epoll.h>
 #include "network/TcpServer.h"
 #include "ConnectionManager.h"
-#pragma once
 
 class RedisServer
 {
@@ -11,6 +12,7 @@ public:
     void handle_client(int);
 
 private:
+    int epoll_fd_;
     TcpServer tcp_server_;
     ConnectionManager connection_manager_;
 };

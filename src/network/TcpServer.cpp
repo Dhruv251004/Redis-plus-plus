@@ -39,13 +39,13 @@ int TcpServer::accept_client()
     return accept(server_socket_, nullptr, nullptr);
 }
 
-optional<string> TcpServer::receive_message(int client_id)
+pair<int, string> TcpServer::receive_message(int client_id)
 {
     char buffer[1024];
     ssize_t bytes = recv(client_id, buffer, sizeof(buffer), 0);
     if (bytes <= 0)
-        return nullopt;
-    return string(buffer, bytes);
+        return {bytes, ""};
+    return {bytes, string(buffer, bytes)};
 }
 
 bool TcpServer::send_message(int client_id, string_view msg)
@@ -71,4 +71,9 @@ bool TcpServer::close_client(int client_id)
 void TcpServer::stop()
 {
     close(server_socket_);
+}
+
+int TcpServer::fd()
+{
+    return server_socket_;
 }
