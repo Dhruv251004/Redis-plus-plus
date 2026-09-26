@@ -1,40 +1,43 @@
 
 #include <iostream>
+#include "protocol/ParseResult.h"
 using namespace std;
 
-bool expect(std::string_view buffer, int &ptr, std::string_view toRead)
+ParseStatus expect(std::string_view buffer, int &ptr, std::string_view toRead)
 {
     int len = buffer.size();
     int start = ptr;
 
     for (char c : toRead)
     {
-        if (ptr >= len || buffer[ptr] != c)
+        if (ptr >= len)
+            return ParseStatus::Incomplete;
+        if (buffer[ptr] != c)
         {
-            ptr = start; // rollback on failure
-            return false;
+            return ParseStatus::Invalid;
         }
         ptr++;
     }
 
-    return true;
+    return ParseStatus::Complete;
 }
 
-optional<int> readNum(string_view buffer, int &ptr)
+pair<ParseStatus, int> readNum(string_view buffer, int &ptr)
 {
     int len = buffer.size();
-    if (ptr >= len || !isdigit(static_cast<unsigned char>(buffer[ptr])))
-        return nullopt;
+    if (ptr >= len)
+        return {ParseStatus::Incomplete, 0};
+    if (!isdigit(static_cast<unsigned char>(buffer[ptr])))
+        return {ParseStatus::Invalid, 0};
 
     int num = 0;
-
     while (ptr < len && isdigit(static_cast<unsigned char>(buffer[ptr])))
     {
         num = num * 10 + (buffer[ptr] - '0');
         ptr++;
     }
 
-    return num;
+    return {ParseStatus::Complete, num};
 }
 
 string readString(string_view buffer, int &ptr, int len)
