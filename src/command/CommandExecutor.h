@@ -23,6 +23,7 @@ private:
     RespValue handle_del(const vector<RespValue> &);
     RespValue handle_exists(const vector<RespValue> &);
     RespValue handle_expire(const vector<RespValue> &);
+    RespValue handle_ttl(const vector<RespValue> &);
     RespValue unknown_command(string_view);
     RespValue wrong_arg_count(string_view);
     RespValue invalid_integer();

@@ -15,6 +15,7 @@ CommandExecutor::CommandExecutor(Database &db) : db_(db)
         {"DEL", &CommandExecutor::handle_del},
         {"EXISTS", &CommandExecutor::handle_exists},
         {"EXPIRE", &CommandExecutor::handle_expire},
+        {"TTL", &CommandExecutor::handle_ttl},
     };
 }
 
@@ -118,6 +119,21 @@ RespValue CommandExecutor::handle_expire(const vector<RespValue> &args)
     }
 
     return RespValue::integer(db_.expire(key, seconds) ? 1 : 0);
+}
+
+RespValue CommandExecutor::handle_ttl(const vector<RespValue> &args)
+{
+    if (args.size() != 1)
+        return wrong_arg_count("TTL");
+
+    auto expiry = db_.ttl(args[0].data());
+    if (!expiry.has_value())
+        return RespValue::integer(-2);
+    if (*expiry == NO_EXPIRY)
+        return RespValue::integer(-1);
+
+    int64_t remaining = (*expiry - currentTimeMs()) / 1000;
+    return RespValue::integer(remaining);
 }
 
 RespValue CommandExecutor::unknown_command(string_view cmd)

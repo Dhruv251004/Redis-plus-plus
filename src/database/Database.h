@@ -10,13 +10,6 @@ class Database
 {
 
 public:
-    optional<string> get(const string &);
-    void set(const string &, const string &);
-    bool expire(const string &, int64_t);
-    bool exists(const string &);
-    bool del(const string &);
-
-private:
     struct KeyEntry
     {
         KeyEntry() {}
@@ -24,5 +17,15 @@ private:
         string data;
         int64_t expiry = NO_EXPIRY;
     };
+
+    optional<string> get(const string &);
+    optional<KeyEntry> get_key_entry(const string &);
+    void set(const string &, const string &);
+    bool expire(const string &, int64_t);
+    bool exists(const string &);
+    bool del(const string &);
+    optional<int64_t> ttl(const string &);
+
+private:
     unordered_map<string, KeyEntry> in_memory_cache_;
 };
