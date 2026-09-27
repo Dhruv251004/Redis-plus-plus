@@ -74,15 +74,30 @@ RespValue CommandExecutor::handle_get(const vector<RespValue> &args)
     return RespValue::bulk_string(*value);
 }
 
-// RespValue CommandExecutor::handle_del(const vector<RespValue> &args)
-// {
-//     if (args.size() != 1)
-//         return wrong_arg_count("DEL");
-//     string key = args[0].data();
-//     db_.del(key);
+RespValue CommandExecutor::handle_del(const vector<RespValue> &args)
+{
+    if (args.size() != 1)
+        return wrong_arg_count("DEL");
+    string key = args[0].data();
 
-//     return RespValue::
-// }
+    if (!db_.exists(key))
+        return RespValue::integer(0);
+
+    db_.del(key);
+    return RespValue::integer(1);
+}
+
+RespValue CommandExecutor::handle_exists(const vector<RespValue> &args)
+{
+    if (args.size() != 1)
+        return wrong_arg_count("EXISTS");
+    string key = args[0].data();
+
+    if (!db_.exists(key))
+        return RespValue::integer(0);
+
+    return RespValue::integer(1);
+}
 
 RespValue CommandExecutor::unknown_command(string_view cmd)
 {

@@ -9,7 +9,7 @@ class Database
 public:
     optional<string> get(const string &) const;
     void set(const string &, const string &);
-    bool contains(const string &) const;
+    bool exists(const string &) const;
     void del(const string &);
 
 private:

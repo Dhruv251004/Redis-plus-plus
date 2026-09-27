@@ -20,8 +20,8 @@ private:
     RespValue handle_echo(const vector<RespValue> &);
     RespValue handle_set(const vector<RespValue> &);
     RespValue handle_get(const vector<RespValue> &);
-    // static RespValue handle_del(const vector<RespValue> &);
-    // static RespValue handle_contains(const vector<RespValue> &);
+    RespValue handle_del(const vector<RespValue> &);
+    RespValue handle_exists(const vector<RespValue> &);
     RespValue unknown_command(string_view);
     RespValue wrong_arg_count(string_view);
 };
