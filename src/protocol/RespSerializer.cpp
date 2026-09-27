@@ -15,6 +15,8 @@ string RespSerializer::serialize(const RespValue &res)
         for (const auto &child : children)
             serialized_res += serialize(child);
     }
+    else if (res.type() == RespValue::Type::Integer)
+        serialized_res = serialize_integer(res.data());
     else if (res.type() == RespValue::Type::Error)
         serialized_res = serialize_error(res.data());
     else if (res.type() == RespValue::Type::NullBulkString)
@@ -54,4 +56,9 @@ string RespSerializer::serialize_error(string_view data)
 string RespSerializer::serialize_null_bulk_string()
 {
     return "$-1\r\n";
+}
+
+string RespSerializer::serialize_integer(string_view data)
+{
+    return ":" + string(data) + "\r\n";
 }

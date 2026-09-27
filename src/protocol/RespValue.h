@@ -21,6 +21,7 @@ public:
     RespValue(Type, string_view);
     static RespValue simple_string(string_view);
     static RespValue bulk_string(string_view);
+    static RespValue integer(int);
     static RespValue array(vector<RespValue>);
     static RespValue null_bulk_string();
     static RespValue error(const string &);

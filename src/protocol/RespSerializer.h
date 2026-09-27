@@ -8,4 +8,5 @@ public:
     static string serialize_bulk_string(std::string_view);
     static string serialize_error(std::string_view);
     static string serialize_null_bulk_string();
+    static string serialize_integer(string_view);
 };

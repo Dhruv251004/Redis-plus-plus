@@ -37,6 +37,11 @@ RespValue::Type RespValue::type() const
     return type_;
 }
 
+RespValue RespValue::integer(int num)
+{
+    return RespValue(Type::Integer, to_string(num));
+}
+
 const string &RespValue::data() const
 {
     return data_;
