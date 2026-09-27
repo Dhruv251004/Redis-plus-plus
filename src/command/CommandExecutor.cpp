@@ -12,6 +12,8 @@ CommandExecutor::CommandExecutor(Database &db) : db_(db)
         {"ECHO", &CommandExecutor::handle_echo},
         {"GET", &CommandExecutor::handle_get},
         {"SET", &CommandExecutor::handle_set},
+        {"DEL", &CommandExecutor::handle_del},
+        {"EXISTS", &CommandExecutor::handle_exists},
     };
 }
 
