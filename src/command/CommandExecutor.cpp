@@ -14,6 +14,7 @@ CommandExecutor::CommandExecutor(Database &db) : db_(db)
         {"SET", &CommandExecutor::handle_set},
         {"DEL", &CommandExecutor::handle_del},
         {"EXISTS", &CommandExecutor::handle_exists},
+        {"EXPIRE", &CommandExecutor::handle_expire},
     };
 }
 
@@ -82,11 +83,7 @@ RespValue CommandExecutor::handle_del(const vector<RespValue> &args)
         return wrong_arg_count("DEL");
     string key = args[0].data();
 
-    if (!db_.exists(key))
-        return RespValue::integer(0);
-
-    db_.del(key);
-    return RespValue::integer(1);
+    return RespValue::integer(db_.del(key) ? 1 : 0);
 }
 
 RespValue CommandExecutor::handle_exists(const vector<RespValue> &args)
@@ -95,10 +92,32 @@ RespValue CommandExecutor::handle_exists(const vector<RespValue> &args)
         return wrong_arg_count("EXISTS");
     string key = args[0].data();
 
-    if (!db_.exists(key))
-        return RespValue::integer(0);
+    return RespValue::integer(db_.exists(key) ? 1 : 0);
+}
 
-    return RespValue::integer(1);
+RespValue CommandExecutor::handle_expire(const vector<RespValue> &args)
+{
+    if (args.size() != 2)
+        return wrong_arg_count("EXPIRE");
+
+    string key = args[0].data();
+    string ttl = args[1].data();
+
+    int64_t seconds = 0;
+    try
+    {
+        size_t pos = 0;
+        seconds = stoll(ttl, &pos);
+        // extra characters after number
+        if (pos != ttl.size())
+            return invalid_integer();
+    }
+    catch (const exception &)
+    {
+        return invalid_integer();
+    }
+
+    return RespValue::integer(db_.expire(key, seconds) ? 1 : 0);
 }
 
 RespValue CommandExecutor::unknown_command(string_view cmd)
@@ -106,7 +125,12 @@ RespValue CommandExecutor::unknown_command(string_view cmd)
     return RespValue::error("ERR unknown command '" + string(cmd) + "'");
 }
 
-RespValue CommandExecutor::wrong_arg_count(std::string_view cmd)
+RespValue CommandExecutor::wrong_arg_count(string_view cmd)
 {
-    return RespValue::error("ERR wrong number of arguments for '" + std::string(cmd) + "' command");
+    return RespValue::error("ERR wrong number of arguments for '" + string(cmd) + "' command");
+}
+
+RespValue CommandExecutor::invalid_integer()
+{
+    return RespValue::error("ERR value is not an integer or out of range");
 }

@@ -1,26 +1,45 @@
-#include "Database.h"
 #include <iostream>
+#include "Database.h"
+#include "utility/TimeUtils.h"
 using namespace std;
 
-optional<string> Database::get(const string &key) const
+optional<string> Database::get(const string &key)
 {
     if (!exists(key))
         return nullopt;
-    return in_memory_cache.at(key);
+    return in_memory_cache_.at(key).data;
 }
 
 void Database::set(const string &key, const string &value)
 {
-    in_memory_cache[key] = value;
+    in_memory_cache_[key] = KeyEntry(value);
 }
 
-bool Database::exists(const string &key) const
+bool Database::exists(const string &key)
 {
-    return in_memory_cache.find(key) != in_memory_cache.end();
+    auto it = in_memory_cache_.find(key);
+    if (it == in_memory_cache_.end())
+        return false;
+    if (isExpired(it->second.expiry))
+    {
+        in_memory_cache_.erase(it);
+        return false;
+    }
+    return true;
 }
-void Database::del(const string &key)
+bool Database::del(const string &key)
 {
     if (!exists(key))
-        return;
-    in_memory_cache.erase(key);
+        return false;
+    in_memory_cache_.erase(key);
+    return true;
+}
+
+bool Database::expire(const std::string &key, int64_t seconds)
+{
+    auto it = in_memory_cache_.find(key);
+    if (it == in_memory_cache_.end())
+        return false;
+    it->second.expiry = currentTimeMs() + seconds * 1000;
+    return true;
 }

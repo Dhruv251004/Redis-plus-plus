@@ -21,7 +21,7 @@ ParseStatus expect(std::string_view buffer, int &ptr, std::string_view toRead)
     return ParseStatus::Complete;
 }
 
-pair<ParseStatus, int> readNum(string_view buffer, int &ptr)
+pair<ParseStatus, int64_t> readNum(string_view buffer, int &ptr)
 {
     int len = buffer.size();
     if (ptr >= len)
@@ -37,6 +37,25 @@ pair<ParseStatus, int> readNum(string_view buffer, int &ptr)
     }
 
     return {ParseStatus::Complete, num};
+}
+
+pair<ParseStatus, int64_t> readInteger(string_view buffer, int &ptr)
+{
+    int len = buffer.size();
+    if (ptr >= len)
+        return {ParseStatus::Incomplete, 0};
+
+    bool is_neg = false;
+    if (buffer[ptr] == '-')
+    {
+        is_neg = true;
+        ptr++;
+    }
+    auto res = readNum(buffer, ptr);
+
+    if (is_neg && res.first == ParseStatus::Complete)
+        res.second *= -1;
+    return res;
 }
 
 string readString(string_view buffer, int &ptr, int len)

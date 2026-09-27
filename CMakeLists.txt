@@ -17,7 +17,7 @@ add_executable(redispp
     src/server/RedisServer.cpp
     src/server/ConnectionManager.cpp
     src/database/Database.cpp
-    src/utility/
+    src/utility/TimeUtils.cpp
 )
 
 target_include_directories(redispp PRIVATE
