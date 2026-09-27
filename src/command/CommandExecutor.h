@@ -27,5 +27,6 @@ private:
     RespValue handle_persist(const vector<RespValue> &);
     RespValue unknown_command(string_view);
     RespValue wrong_arg_count(string_view);
+    RespValue syntax_error();
     RespValue invalid_integer();
 };

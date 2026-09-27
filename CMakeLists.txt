@@ -18,6 +18,7 @@ add_executable(redispp
     src/server/ConnectionManager.cpp
     src/database/Database.cpp
     src/utility/TimeUtils.cpp
+    src/utility/StringUtils.cpp
 )
 
 target_include_directories(redispp PRIVATE

@@ -59,11 +59,26 @@ RespValue CommandExecutor::handle_echo(const vector<RespValue> &args)
 
 RespValue CommandExecutor::handle_set(const vector<RespValue> &args)
 {
-    if (args.size() != 2)
+    if (args.size() != 2 && args.size() != 4)
         return wrong_arg_count("SET");
+
     string key = args[0].data();
     string value = args[1].data();
-    db_.set(key, value);
+
+    if (args.size() > 2)
+    {
+        string cmd = args[2].data();
+        if (cmd != "EX")
+            return syntax_error();
+        auto expiry = parse_integer(args[3].data());
+        if (!expiry.has_value())
+            return invalid_integer();
+        db_.set(key, value, *expiry);
+    }
+    else
+    {
+        db_.set(key, value);
+    }
 
     return RespValue::simple_string("OK");
 }
@@ -105,21 +120,11 @@ RespValue CommandExecutor::handle_expire(const vector<RespValue> &args)
     string key = args[0].data();
     string ttl = args[1].data();
 
-    int64_t seconds = 0;
-    try
-    {
-        size_t pos = 0;
-        seconds = stoll(ttl, &pos);
-        // extra characters after number
-        if (pos != ttl.size())
-            return invalid_integer();
-    }
-    catch (const exception &)
-    {
+    auto seconds = parse_integer(args[1].data());
+    if (!seconds.has_value())
         return invalid_integer();
-    }
 
-    return RespValue::integer(db_.expire(key, seconds) ? 1 : 0);
+    return RespValue::integer(db_.expire(key, *seconds) ? 1 : 0);
 }
 
 RespValue CommandExecutor::handle_ttl(const vector<RespValue> &args)
@@ -157,4 +162,9 @@ RespValue CommandExecutor::wrong_arg_count(string_view cmd)
 RespValue CommandExecutor::invalid_integer()
 {
     return RespValue::error("ERR value is not an integer or out of range");
+}
+
+RespValue CommandExecutor::syntax_error()
+{
+    return RespValue::error("ERR syntax error");
 }

@@ -22,6 +22,11 @@ void Database::set(const string &key, const string &value)
     in_memory_cache_[key] = KeyEntry(value);
 }
 
+void Database::set(const string &key, const string &value, int64_t expiry)
+{
+    in_memory_cache_[key] = KeyEntry(value, expiry == NO_EXPIRY ? NO_EXPIRY : (expiry > (INT64_MAX - currentTimeMs()) / 1000 ? INT64_MAX : currentTimeMs() + expiry * 1000));
+}
+
 bool Database::exists(const string &key)
 {
     auto it = in_memory_cache_.find(key);
@@ -47,7 +52,8 @@ bool Database::expire(const std::string &key, int64_t seconds)
     auto it = in_memory_cache_.find(key);
     if (it == in_memory_cache_.end())
         return false;
-    it->second.expiry = currentTimeMs() + seconds * 1000;
+    int64_t now = currentTimeMs();
+    it->second.expiry = (seconds > (INT64_MAX - now) / 1000) ? INT64_MAX : now + seconds * 1000;
     return true;
 }
 optional<int64_t> Database::ttl(const string &key)

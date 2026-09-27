@@ -1,16 +1,10 @@
 #pragma once
 
 #include <string>
-#include <cctype>
+#include <string_view>
+#include <optional>
+#include <cstdint>
 
-inline std::string uppercase(std::string_view input)
-{
-    std::string result(input);
+std::string uppercase(std::string_view input);
 
-    for (char &c : result)
-    {
-        c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-    }
-
-    return result;
-}
+std::optional<int64_t> parse_integer(std::string_view value);

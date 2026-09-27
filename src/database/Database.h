@@ -21,6 +21,7 @@ public:
     optional<string> get(const string &);
     optional<KeyEntry> get_key_entry(const string &);
     void set(const string &, const string &);
+    void set(const string &, const string &, int64_t);
     bool expire(const string &, int64_t);
     bool exists(const string &);
     bool del(const string &);
