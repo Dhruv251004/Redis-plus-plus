@@ -24,6 +24,7 @@ public:
     bool expire(const string &, int64_t);
     bool exists(const string &);
     bool del(const string &);
+    bool persist(const string &);
     optional<int64_t> ttl(const string &);
 
 private:

@@ -16,6 +16,7 @@ CommandExecutor::CommandExecutor(Database &db) : db_(db)
         {"EXISTS", &CommandExecutor::handle_exists},
         {"EXPIRE", &CommandExecutor::handle_expire},
         {"TTL", &CommandExecutor::handle_ttl},
+        {"PERSIST", &CommandExecutor::handle_persist},
     };
 }
 
@@ -134,6 +135,13 @@ RespValue CommandExecutor::handle_ttl(const vector<RespValue> &args)
 
     int64_t remaining = (*expiry - currentTimeMs()) / 1000;
     return RespValue::integer(remaining);
+}
+
+RespValue CommandExecutor::handle_persist(const vector<RespValue> &args)
+{
+    if (args.size() != 1)
+        return wrong_arg_count("PERSIST");
+    return RespValue::integer(db_.persist(args[0].data()) ? 1 : 0);
 }
 
 RespValue CommandExecutor::unknown_command(string_view cmd)

@@ -57,3 +57,13 @@ optional<int64_t> Database::ttl(const string &key)
         return nullopt;
     return entry->expiry;
 }
+
+bool Database::persist(const string &key)
+{
+    auto entry = get_key_entry(key);
+    if (!entry.has_value() || entry->expiry == NO_EXPIRY)
+        return false;
+
+    in_memory_cache_.at(key).expiry = NO_EXPIRY;
+    return true;
+}
