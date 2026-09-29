@@ -19,6 +19,7 @@ add_executable(redispp
     src/database/Database.cpp
     src/utility/TimeUtils.cpp
     src/utility/StringUtils.cpp
+    src/persistence/AOF.cpp
 )
 
 target_include_directories(redispp PRIVATE

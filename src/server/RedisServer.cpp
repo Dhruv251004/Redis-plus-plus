@@ -12,13 +12,17 @@ using namespace std;
 
 constexpr int MAX_EVENTS = 64;
 
-RedisServer::RedisServer(int port) : tcp_server_(port), db_(), command_executor_(db_) {}
+RedisServer::RedisServer(int port) : tcp_server_(port), db_(), aof_("data/appendonly.aof"), command_executor_(db_, aof_) {}
 
 void RedisServer::start()
 {
     bool res = tcp_server_.start();
     if (!res)
         return;
+
+    // replay all messages
+    aof_.replay([this](string_view cmd)
+                { handle_replay(cmd); });
 
     // Create epoll instance
     epoll_fd_ = epoll_create1(0);
@@ -137,6 +141,24 @@ void RedisServer::handle_client(int client_fd)
     epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, client_fd, nullptr);
     tcp_server_.close_client(client_fd);
     connection_manager_.remove(client_fd);
+}
+
+void RedisServer::handle_replay(string_view cmds)
+{
+    auto [parse_status, input_resp, consumed] = RespParser::parse(cmds);
+
+    if (parse_status == ParseStatus::Invalid)
+    {
+        cerr << "Corrupted AOF entry. Skipping restore.\n";
+        return;
+    }
+    if (parse_status == ParseStatus::Incomplete)
+    {
+        cerr << "Truncated AOF entry detected. Restore aborted.\n";
+        return;
+    }
+
+    command_executor_.execute(*input_resp);
 }
 
 void RedisServer::stop()
