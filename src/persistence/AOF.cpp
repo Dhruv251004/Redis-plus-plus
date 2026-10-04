@@ -26,7 +26,7 @@ void AOF::close()
         cerr << "Failedto close file with fd : " << fd_ << endl;
 }
 
-bool AOF::append(string command)
+bool AOF::append(string_view command)
 {
     ssize_t written = ::write(fd_, command.data(), command.size());
 

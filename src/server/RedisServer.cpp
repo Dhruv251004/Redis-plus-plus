@@ -7,10 +7,13 @@
 #include "protocol/RespSerializer.h"
 #include "protocol/ParseResult.h"
 #include "database/Database.h"
+#include "utility/StringUtils.h"
 
 using namespace std;
 
 constexpr int MAX_EVENTS = 64;
+
+const unordered_set<string> RedisServer::write_command_ = {"SET", "DEL", "EXPIRE", "EXPIREAT", "PEXPIREAT", "PERSIST"};
 
 RedisServer::RedisServer(int port) : tcp_server_(port), db_(), aof_("data/appendonly.aof"), command_executor_(db_, aof_) {}
 
@@ -20,9 +23,18 @@ void RedisServer::start()
     if (!res)
         return;
 
+    if (!aof_.open())
+    {
+        cerr << "failed to open aof file\n";
+        return;
+    }
+
     // replay all messages
     aof_.replay([this](string_view cmd)
                 { handle_replay(cmd); });
+
+    if (!aof_.open())
+        return;
 
     // Create epoll instance
     epoll_fd_ = epoll_create1(0);
@@ -109,9 +121,23 @@ void RedisServer::handle_client(int client_fd)
                 return;
             }
 
-            conn.consume(consumed);
+            // persist in memeory
             RespValue output_resp = command_executor_.execute(*input_resp);
+
+            // persist in db
+            string cmdName = uppercase((input_resp->children())[0].data());
+            if (output_resp.type() != RespValue::Type::Error && is_write_command(cmdName))
+            {
+                string_view raw_cmd = conn.buffer().substr(0, consumed);
+                if (!aof_.append(raw_cmd))
+                {
+                    cerr << "error persisting cmd\n";
+                    return;
+                }
+            }
+
             string output_msg = RespSerializer::serialize(output_resp);
+            conn.consume(consumed);
 
             if (!tcp_server_.send_message(client_fd, output_msg))
             {
@@ -145,20 +171,28 @@ void RedisServer::handle_client(int client_fd)
 
 void RedisServer::handle_replay(string_view cmds)
 {
-    auto [parse_status, input_resp, consumed] = RespParser::parse(cmds);
-
-    if (parse_status == ParseStatus::Invalid)
+    while (cmds.size() > 0)
     {
-        cerr << "Corrupted AOF entry. Skipping restore.\n";
-        return;
-    }
-    if (parse_status == ParseStatus::Incomplete)
-    {
-        cerr << "Truncated AOF entry detected. Restore aborted.\n";
-        return;
-    }
+        auto [parse_status, input_resp, consumed] = RespParser::parse(cmds);
+        if (parse_status == ParseStatus::Invalid)
+        {
+            cerr << "Corrupted AOF entry. Skipping restore.\n";
+            return;
+        }
+        if (parse_status == ParseStatus::Incomplete)
+        {
+            cerr << "Truncated AOF entry detected. Restore aborted.\n";
+            return;
+        }
 
-    command_executor_.execute(*input_resp);
+        command_executor_.execute(*input_resp);
+        cmds.remove_prefix(consumed);
+    }
+}
+
+bool RedisServer::is_write_command(const string &cmd)
+{
+    return write_command_.find(cmd) != write_command_.end();
 }
 
 void RedisServer::stop()
