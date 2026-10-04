@@ -8,6 +8,7 @@
 #include "protocol/ParseResult.h"
 #include "database/Database.h"
 #include "utility/StringUtils.h"
+#include "utility/redisPlusPlus.h"
 
 using namespace std;
 
@@ -54,6 +55,8 @@ void RedisServer::start()
         cerr << "Failed to add server socket to epoll\n";
         return;
     }
+
+    printWelcomeScreen();
 
     vector<epoll_event> events(MAX_EVENTS);
 
