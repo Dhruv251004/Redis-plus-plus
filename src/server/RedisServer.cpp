@@ -125,17 +125,7 @@ void RedisServer::handle_client(int client_fd)
             RespValue output_resp = command_executor_.execute(*input_resp);
 
             // persist in db
-            string cmdName = uppercase((input_resp->children())[0].data());
-            if (output_resp.type() != RespValue::Type::Error && is_write_command(cmdName))
-            {
-                string_view raw_cmd = conn.buffer().substr(0, consumed);
-                if (!aof_.append(raw_cmd))
-                {
-                    cerr << "error persisting cmd\n";
-                    return;
-                }
-            }
-
+            persist_in_db(*input_resp, output_resp);
             string output_msg = RespSerializer::serialize(output_resp);
             conn.consume(consumed);
 
@@ -198,4 +188,36 @@ bool RedisServer::is_write_command(const string &cmd)
 void RedisServer::stop()
 {
     tcp_server_.stop();
+}
+
+void RedisServer::persist_in_db(const RespValue &input, const RespValue &output)
+{
+    if (output.type() == RespValue::Type::Error)
+        return;
+
+    const auto &args = input.children();
+    string cmdName = uppercase(args[0].data());
+    if (!is_write_command(cmdName))
+        return;
+
+    string entry;
+    if (cmdName == "EXPIRE" || (cmdName == "SET" && args.size() > 3))
+    {
+        if (cmdName == "SET")
+            entry = RespSerializer::serialize(RespValue::array(
+                {RespValue::bulk_string("SET"), args[1], args[2]}));
+
+        auto deadline = db_.ttl(args[1].data());
+        if (deadline.has_value() && *deadline != NO_EXPIRY)
+            entry += RespSerializer::serialize(RespValue::array(
+                {RespValue::bulk_string("PEXPIREAT"), args[1],
+                 RespValue::bulk_string(to_string(*deadline))}));
+    }
+    else
+    {
+        entry = RespSerializer::serialize(input);
+    }
+
+    if (!aof_.append(entry))
+        cerr << "error persisting cmd\n";
 }

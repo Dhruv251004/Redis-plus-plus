@@ -71,7 +71,7 @@ RespValue CommandExecutor::handle_set(const vector<RespValue> &args)
 
     if (args.size() > 2)
     {
-        string cmd = args[2].data();
+        string cmd = uppercase(args[2].data());
         if (cmd != "EX")
             return syntax_error();
         auto expiry = parse_integer(args[3].data());

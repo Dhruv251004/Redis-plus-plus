@@ -16,6 +16,7 @@ public:
     void handle_client(int);
     void handle_replay(string_view);
     static bool is_write_command(const string &);
+    void persist_in_db(const RespValue &, const RespValue &);
 
 private:
     static const unordered_set<string> write_command_;
