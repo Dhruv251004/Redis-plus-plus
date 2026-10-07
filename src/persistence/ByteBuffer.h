@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstdint>
 #include <optional>
+#include <zlib.h>
 
 class ByteBuffer
 {
@@ -14,7 +15,9 @@ public:
     void write_u16(uint16_t);
     void write_u32(uint32_t);
     void write_u64(uint64_t);
-    const std::vector<uint8_t> data() const;
+    const uint8_t *data() const;
+    size_t size() const;
+    uint32_t crc32() const;
 
     std::optional<std::string> read_string(uint32_t);
     std::optional<uint8_t> read_u8();

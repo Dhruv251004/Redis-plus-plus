@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+find_package(ZLIB REQUIRED)
+
 add_executable(redispp
     src/main.cpp
     src/network/TcpServer.cpp
@@ -21,12 +23,16 @@ add_executable(redispp
     src/utility/StringUtils.cpp
     src/utility/redisPlusPlus.cpp
     src/persistence/AOF.cpp
+    src/persistence/ByteBuffer.cpp
+    src/persistence/RDB.cpp
 )
 
 target_include_directories(redispp PRIVATE
     include
     src
 )
+
+target_link_libraries(redispp PRIVATE ZLIB::ZLIB)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(redispp PRIVATE

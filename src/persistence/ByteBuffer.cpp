@@ -125,3 +125,22 @@ optional<uint64_t> ByteBuffer::read_u64()
     }
     return num;
 }
+
+const uint8_t *ByteBuffer::data() const
+{
+    if (buffer_.size() == 0)
+        return nullptr;
+    return &buffer_[0];
+}
+
+size_t ByteBuffer::size() const
+{
+    return buffer_.size();
+}
+
+uint32_t ByteBuffer::crc32() const
+{
+    if (buffer_.empty())
+        return ::crc32(0L, Z_NULL, 0);
+    return ::crc32(0LL, &buffer_[0], buffer_.size());
+}

@@ -72,3 +72,13 @@ bool Database::persist(const string &key)
     in_memory_cache_.at(key).expiry = NO_EXPIRY;
     return true;
 }
+
+size_t Database::get_db_size() const
+{
+    return in_memory_cache_.size();
+}
+
+unordered_map<string, Database::KeyEntry> Database::get_all_data() const
+{
+    return in_memory_cache_;
+}
