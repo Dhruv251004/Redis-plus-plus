@@ -153,3 +153,8 @@ void ByteBuffer::write_bytes(const uint8_t *bytes, size_t len)
         buffer_.push_back(bytes[i]);
     }
 }
+
+size_t ByteBuffer::remaining_size() const
+{
+    return buffer_.size() - offset_;
+}

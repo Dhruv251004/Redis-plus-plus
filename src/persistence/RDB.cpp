@@ -3,6 +3,7 @@
 #include "RDB.h"
 #include "database/Database.h"
 #include "utility/Types.h"
+#include "constants/Constants.h"
 
 RDB::RDB(const string &path) : path_(path) {}
 
@@ -35,7 +36,9 @@ bool RDB::write(const Database &db)
 
     writer.write_u32(writer.crc32(0, writer.size() - 1)); // write checksum
 
-    int fd = open(path_.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    // write in a tmp file then replace atomically
+    string tmp_file_path = BASE_DB_PATH + "/" + TMP_RDB_FILE_NAME;
+    int fd = open(tmp_file_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if (fd < 0)
     {
         cerr << "failed to open dump file\n";
@@ -59,9 +62,23 @@ bool RDB::write(const Database &db)
         total_written += static_cast<size_t>(res);
     }
 
+    if (fsync(fd) < 0)
+    {
+        cerr << "failed to save dump file\n";
+        close(fd);
+        return false;
+    }
     if (close(fd) < 0)
     {
         cerr << "failed to close dump file\n";
+        return false;
+    }
+
+    // atomically replace the old file
+    string original_file_path = BASE_DB_PATH + "/" + RDB_FILE_NAME;
+    if (rename(tmp_file_path.c_str(), original_file_path.c_str()) == -1)
+    {
+        unlink(tmp_file_path.c_str());
         return false;
     }
 
@@ -154,7 +171,7 @@ bool RDB::validate(ByteBuffer content)
     if (content.size() < 4)
         return false;
 
-    uint32_t checksum = content.crc32(-1, content.size() - 4);
+    uint32_t checksum = content.crc32(0, content.size() - 4);
     auto header = content.read_string(4); // header ( 4 bytes )
     if (!header.has_value() || *header != "RDB1")
         return false;
@@ -195,7 +212,7 @@ bool RDB::validate(ByteBuffer content)
     }
 
     auto stored_checksum = content.read_u32();
-    if (!stored_checksum.has_value() || *stored_checksum != checksum || content.size() != 0)
+    if (!stored_checksum.has_value() || *stored_checksum != checksum || content.remaining_size() != 0)
         return false;
 
     return true;

@@ -18,6 +18,7 @@ public:
     void write_bytes(const uint8_t *, size_t);
     const uint8_t *data() const;
     size_t size() const;
+    size_t remaining_size() const;
     uint32_t crc32(size_t start, size_t end) const;
 
     std::optional<std::string> read_string(uint32_t);

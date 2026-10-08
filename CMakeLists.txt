@@ -21,7 +21,7 @@ add_executable(redispp
     src/database/Database.cpp
     src/utility/TimeUtils.cpp
     src/utility/StringUtils.cpp
-    src/utility/redisPlusPlus.cpp
+    src/utility/RedisPlusPlus.cpp
     src/persistence/AOF.cpp
     src/persistence/ByteBuffer.cpp
     src/persistence/RDB.cpp

@@ -8,7 +8,8 @@
 #include "protocol/ParseResult.h"
 #include "database/Database.h"
 #include "utility/StringUtils.h"
-#include "utility/redisPlusPlus.h"
+#include "utility/RedisPlusPlus.h"
+#include "constants/Constants.h"
 
 using namespace std;
 
@@ -16,7 +17,7 @@ constexpr int MAX_EVENTS = 64;
 
 const unordered_set<string> RedisServer::write_command_ = {"SET", "DEL", "EXPIRE", "EXPIREAT", "PEXPIREAT", "PERSIST"};
 
-RedisServer::RedisServer(int port) : tcp_server_(port), db_(), aof_("data/appendonly.aof"), command_executor_(db_, aof_) {}
+RedisServer::RedisServer(int port) : tcp_server_(port), db_(), aof_(BASE_DB_PATH + "/" + AOF_FILE_NAME), command_executor_(db_, aof_) {}
 
 void RedisServer::start()
 {
