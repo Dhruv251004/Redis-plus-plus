@@ -17,13 +17,19 @@ constexpr int MAX_EVENTS = 64;
 
 const unordered_set<string> RedisServer::write_command_ = {"SET", "DEL", "EXPIRE", "EXPIREAT", "PEXPIREAT", "PERSIST"};
 
-RedisServer::RedisServer(int port) : tcp_server_(port), db_(), aof_(BASE_DB_PATH + "/" + AOF_FILE_NAME), command_executor_(db_, aof_) {}
+RedisServer::RedisServer(int port) : tcp_server_(port), db_(), aof_(BASE_DB_PATH + "/" + AOF_FILE_NAME), command_executor_(db_, aof_), rdb_(BASE_DB_PATH + "/" + RDB_FILE_NAME) {}
 
 void RedisServer::start()
 {
     bool res = tcp_server_.start();
     if (!res)
         return;
+
+    if (!rdb_.read(db_))
+    {
+        cerr << "failed to restore db snapshot\n";
+        return;
+    }
 
     if (!aof_.open())
     {
@@ -34,9 +40,6 @@ void RedisServer::start()
     // replay all messages
     aof_.replay([this](string_view cmd)
                 { handle_replay(cmd); });
-
-    if (!aof_.open())
-        return;
 
     // Create epoll instance
     epoll_fd_ = epoll_create1(0);
@@ -224,4 +227,19 @@ void RedisServer::persist_in_db(const RespValue &input, const RespValue &output)
 
     if (!aof_.append(entry))
         cerr << "error persisting cmd\n";
+}
+
+bool RedisServer::save_snapshot()
+{
+    // sync aof to db now dump db snapshot to rdb then clear the aof file
+    if (!aof_.fsync())
+        return false;
+
+    if (!rdb_.write(db_))
+        return false;
+
+    if (!aof_.truncate())
+        return false;
+
+    return true;
 }

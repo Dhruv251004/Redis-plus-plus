@@ -13,6 +13,8 @@ public:
     bool open();
     bool append(std::string_view);
     void close();
+    bool fsync();
+    bool truncate();
 
     template <typename F>
     void replay(F callback)

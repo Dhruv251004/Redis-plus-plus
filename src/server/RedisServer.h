@@ -6,6 +6,7 @@
 #include "command/CommandExecutor.h"
 #include "database/Database.h"
 #include "persistence/AOF.h"
+#include "persistence/RDB.h"
 
 class RedisServer
 {
@@ -17,6 +18,7 @@ public:
     void handle_replay(string_view);
     static bool is_write_command(const string &);
     void persist_in_db(const RespValue &, const RespValue &);
+    bool save_snapshot();
 
 private:
     static const unordered_set<string> write_command_;
@@ -26,4 +28,5 @@ private:
     Database db_;
     AOF aof_;
     CommandExecutor command_executor_;
+    RDB rdb_;
 };

@@ -110,6 +110,9 @@ bool RDB::read(Database &db)
         return false;
     }
 
+    if (bytes_read == 0) // in case of empty file just return true
+        return true;
+
     if (close(fd) < 0)
     {
         cerr << "Failed to close file\n";
