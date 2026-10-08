@@ -15,9 +15,10 @@ public:
     void write_u16(uint16_t);
     void write_u32(uint32_t);
     void write_u64(uint64_t);
+    void write_bytes(const uint8_t *, size_t);
     const uint8_t *data() const;
     size_t size() const;
-    uint32_t crc32() const;
+    uint32_t crc32(size_t start, size_t end) const;
 
     std::optional<std::string> read_string(uint32_t);
     std::optional<uint8_t> read_u8();

@@ -54,7 +54,7 @@ public:
     RDB(const string &);
     bool write(const Database &);
     bool read(Database &);
-    bool validate();
+    bool validate(ByteBuffer);
 
 private:
     std::string path_;

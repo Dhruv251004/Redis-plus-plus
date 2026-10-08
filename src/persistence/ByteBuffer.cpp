@@ -138,9 +138,18 @@ size_t ByteBuffer::size() const
     return buffer_.size();
 }
 
-uint32_t ByteBuffer::crc32() const
+uint32_t ByteBuffer::crc32(size_t start, size_t end) const
 {
-    if (buffer_.empty())
+    if (buffer_.empty() || start > end || end >= buffer_.size())
         return ::crc32(0L, Z_NULL, 0);
-    return ::crc32(0LL, &buffer_[0], buffer_.size());
+    size_t len = end - start + 1;
+    return ::crc32(0LL, &buffer_[start], len);
+}
+
+void ByteBuffer::write_bytes(const uint8_t *bytes, size_t len)
+{
+    for (size_t i = 0; i < len; i++)
+    {
+        buffer_.push_back(bytes[i]);
+    }
 }

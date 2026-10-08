@@ -25,6 +25,7 @@ add_executable(redispp
     src/persistence/AOF.cpp
     src/persistence/ByteBuffer.cpp
     src/persistence/RDB.cpp
+    src/utility/Types.cpp
 )
 
 target_include_directories(redispp PRIVATE
@@ -39,5 +40,6 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         -Wall
         -Wextra
         -Wpedantic
+        -Werror
     )
 endif()
