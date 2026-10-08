@@ -75,8 +75,7 @@ bool RDB::write(const Database &db)
     }
 
     // atomically replace the old file
-    string original_file_path = BASE_DB_PATH + "/" + RDB_FILE_NAME;
-    if (rename(tmp_file_path.c_str(), original_file_path.c_str()) == -1)
+    if (rename(tmp_file_path.c_str(), path_.c_str()) == -1)
     {
         unlink(tmp_file_path.c_str());
         return false;
