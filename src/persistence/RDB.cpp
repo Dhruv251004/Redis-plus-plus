@@ -84,6 +84,7 @@ bool RDB::write(const Database &db)
         return false;
     }
 
+    spdlog::info("[RDB.cpp::RDB::write] dump saved to {} ({} bytes)", path_, total_size);
     return true;
 }
 
@@ -134,7 +135,7 @@ bool RDB::read(Database &db)
     // Validate before modifying the database
     if (!validate(reader))
     {
-        spdlog::error("[RDB.cpp::RDB::read] corrupted dump file {}", path_);
+        spdlog::error("[RDB.cpp::RDB::read] refusing to load corrupted dump file {}", path_);
         return false;
     }
 
@@ -187,7 +188,7 @@ bool RDB::validate(ByteBuffer content)
 {
     if (content.size() < 4)
     {
-        spdlog::warn("[RDB.cpp::RDB::validate] file too small");
+        spdlog::warn("[RDB.cpp::RDB::validate] file too small to be a valid dump ({} bytes, need at least 4)", content.size());
         return false;
     }
 
@@ -195,37 +196,39 @@ bool RDB::validate(ByteBuffer content)
     auto header = content.read_string(4); // header ( 4 bytes )
     if (!header.has_value() || *header != "RDB1")
     {
-        spdlog::warn("[RDB.cpp::RDB::validate] invalid header");
+        spdlog::warn("[RDB.cpp::RDB::validate] invalid header, expected \"RDB1\" but found \"{}\"", header.value_or(""));
         return false;
     }
 
     auto version = content.read_u8(); // version
     if (!version.has_value() || *version != 1)
     {
-        spdlog::warn("[RDB.cpp::RDB::validate] invalid version");
+        spdlog::warn("[RDB.cpp::RDB::validate] unsupported dump version {}, expected 1", version.has_value() ? static_cast<int>(*version) : -1);
         return false;
     }
 
     auto num_keys = content.read_u64(); // num of keys
     if (!num_keys.has_value())
     {
-        spdlog::warn("[RDB.cpp::RDB::validate] failed to read num_keys");
+        spdlog::warn("[RDB.cpp::RDB::validate] dump is truncated, could not read key count");
         return false;
     }
 
+    const uint64_t total_keys = *num_keys;
     while (*num_keys > 0)
     {
+        const uint64_t entry = total_keys - *num_keys;
         // Key info
         auto key_len = content.read_u32();
         if (!key_len.has_value())
         {
-            spdlog::warn("[RDB.cpp::RDB::validate] failed to read key_len");
+            spdlog::warn("[RDB.cpp::RDB::validate] dump is truncated at entry {} of {}, could not read key length", entry, total_keys);
             return false;
         }
         auto key = content.read_string(*key_len);
         if (!key.has_value())
         {
-            spdlog::warn("[RDB.cpp::RDB::validate] failed to read key");
+            spdlog::warn("[RDB.cpp::RDB::validate] dump is truncated at entry {} of {}, could not read key", entry, total_keys);
             return false;
         }
 
@@ -233,25 +236,25 @@ bool RDB::validate(ByteBuffer content)
         auto type = content.read_u8();
         if (!type.has_value() || !is_valid_value_type(*type))
         {
-            spdlog::warn("[RDB.cpp::RDB::validate] invalid value type");
+            spdlog::warn("[RDB.cpp::RDB::validate] entry {} of {} has an invalid or truncated value type", entry, total_keys);
             return false;
         }
         auto value_len = content.read_u64();
         if (!value_len.has_value())
         {
-            spdlog::warn("[RDB.cpp::RDB::validate] failed to read value_len");
+            spdlog::warn("[RDB.cpp::RDB::validate] dump is truncated at entry {} of {}, could not read value length", entry, total_keys);
             return false;
         }
         auto value = content.read_string(*value_len);
         if (!value.has_value())
         {
-            spdlog::warn("[RDB.cpp::RDB::validate] failed to read value");
+            spdlog::warn("[RDB.cpp::RDB::validate] dump is truncated at entry {} of {}, could not read value", entry, total_keys);
             return false;
         }
         auto expiry = content.read_u64();
         if (!expiry.has_value())
         {
-            spdlog::warn("[RDB.cpp::RDB::validate] failed to read expiry");
+            spdlog::warn("[RDB.cpp::RDB::validate] dump is truncated at entry {} of {}, could not read expiry", entry, total_keys);
             return false;
         }
 
@@ -261,17 +264,17 @@ bool RDB::validate(ByteBuffer content)
     auto stored_checksum = content.read_u32();
     if (!stored_checksum.has_value())
     {
-        spdlog::warn("[RDB.cpp::RDB::validate] failed to read checksum");
+        spdlog::warn("[RDB.cpp::RDB::validate] dump is truncated, could not read checksum after {} entries", total_keys);
         return false;
     }
     if (*stored_checksum != checksum)
     {
-        spdlog::warn("[RDB.cpp::RDB::validate] checksum mismatch: stored={} computed={}", *stored_checksum, checksum);
+        spdlog::warn("[RDB.cpp::RDB::validate] checksum mismatch, dump is corrupted (stored={} computed={})", *stored_checksum, checksum);
         return false;
     }
     if (content.remaining_size() != 0)
     {
-        spdlog::warn("[RDB.cpp::RDB::validate] trailing bytes after checksum");
+        spdlog::warn("[RDB.cpp::RDB::validate] {} unexpected trailing bytes after checksum", content.remaining_size());
         return false;
     }
 

@@ -27,13 +27,13 @@ void RedisServer::start()
     bool res = tcp_server_.start();
     if (!res)
     {
-        spdlog::error("[RedisServer.cpp::RedisServer::start] failed to start tcp server: {}", strerror(errno));
+        spdlog::error("[RedisServer.cpp::RedisServer::start] failed to start tcp server, aborting startup: {}", strerror(errno));
         return;
     }
 
     if (!rdb_.read(db_))
     {
-        spdlog::error("[RedisServer.cpp::RedisServer::start] failed to restore db snapshot");
+        spdlog::error("[RedisServer.cpp::RedisServer::start] failed to restore db snapshot from {}, aborting startup", BASE_DB_PATH + "/" + RDB_FILE_NAME);
         return;
     }
 
@@ -41,7 +41,7 @@ void RedisServer::start()
 
     if (!aof_.open())
     {
-        spdlog::error("[RedisServer.cpp::RedisServer::start] failed to open aof file");
+        spdlog::error("[RedisServer.cpp::RedisServer::start] failed to open aof file {}, aborting startup", BASE_DB_PATH + "/" + AOF_FILE_NAME);
         return;
     }
 
@@ -121,7 +121,7 @@ void RedisServer::start()
                 if (n == sizeof(expirations))
                 {
                     if (!save_snapshot())
-                        spdlog::error("[RedisServer.cpp::RedisServer::start] automatic snapshot failed");
+                        spdlog::error("[RedisServer.cpp::RedisServer::start] scheduled snapshot failed, will retry at the next interval");
                 }
                 else if (n == -1 && errno != EAGAIN && errno != EWOULDBLOCK)
                 {
@@ -151,7 +151,7 @@ void RedisServer::handle_client(int client_fd)
                 break;
             if (parse_status == ParseStatus::Invalid)
             {
-                spdlog::warn("[RedisServer.cpp::RedisServer::handle_client] invalid request from client fd {}, closing connection", client_fd);
+                spdlog::warn("[RedisServer.cpp::RedisServer::handle_client] invalid request from client fd {} ({}), closing connection", client_fd, input_resp->data());
                 string err = RespSerializer::serialize(*input_resp);
                 tcp_server_.send_message(client_fd, err);
                 epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, client_fd, nullptr);
@@ -170,7 +170,7 @@ void RedisServer::handle_client(int client_fd)
 
             if (!tcp_server_.send_message(client_fd, output_msg))
             {
-                spdlog::warn("[RedisServer.cpp::RedisServer::handle_client] failed to send message to client fd {}, closing connection", client_fd);
+                spdlog::warn("[RedisServer.cpp::RedisServer::handle_client] failed to send reply to client fd {}, closing connection", client_fd);
                 epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, client_fd, nullptr);
                 tcp_server_.close_client(client_fd);
                 connection_manager_.remove(client_fd);
@@ -206,12 +206,12 @@ void RedisServer::handle_replay(string_view cmds)
         auto [parse_status, input_resp, consumed] = RespParser::parse(cmds);
         if (parse_status == ParseStatus::Invalid)
         {
-            spdlog::warn("[RedisServer.cpp::RedisServer::handle_replay] corrupted aof entry, skipping restore of remaining entries");
+            spdlog::warn("[RedisServer.cpp::RedisServer::handle_replay] corrupted aof entry, skipping restore of the remaining {} bytes", cmds.size());
             return;
         }
         if (parse_status == ParseStatus::Incomplete)
         {
-            spdlog::warn("[RedisServer.cpp::RedisServer::handle_replay] truncated aof entry detected, restore aborted");
+            spdlog::warn("[RedisServer.cpp::RedisServer::handle_replay] truncated aof entry, restore aborted with {} unread bytes", cmds.size());
             return;
         }
 
@@ -259,7 +259,7 @@ void RedisServer::persist_in_db(const RespValue &input, const RespValue &output)
     }
 
     if (!aof_.append(entry))
-        spdlog::error("[RedisServer.cpp::RedisServer::persist_in_db] failed to append command to aof");
+        spdlog::error("[RedisServer.cpp::RedisServer::persist_in_db] failed to append {} command to aof, it will be lost on restart", cmdName);
 }
 
 bool RedisServer::save_snapshot()
@@ -269,19 +269,19 @@ bool RedisServer::save_snapshot()
     // sync aof to db now dump db snapshot to rdb then clear the aof file
     if (!aof_.fsync())
     {
-        spdlog::error("[RedisServer.cpp::RedisServer::save_snapshot] snapshot aborted: aof fsync failed");
+        spdlog::error("[RedisServer.cpp::RedisServer::save_snapshot] snapshot aborted, aof fsync failed");
         return false;
     }
 
     if (!rdb_.write(db_))
     {
-        spdlog::error("[RedisServer.cpp::RedisServer::save_snapshot] snapshot aborted: rdb write failed");
+        spdlog::error("[RedisServer.cpp::RedisServer::save_snapshot] snapshot aborted, rdb write failed (aof left untouched)");
         return false;
     }
 
     if (!aof_.truncate())
     {
-        spdlog::error("[RedisServer.cpp::RedisServer::save_snapshot] snapshot written but aof truncate failed");
+        spdlog::error("[RedisServer.cpp::RedisServer::save_snapshot] snapshot saved but aof truncate failed, aof will keep growing");
         return false;
     }
 
