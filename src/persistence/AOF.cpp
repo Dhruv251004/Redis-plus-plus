@@ -14,7 +14,7 @@ bool AOF::open()
     fd_ = ::open(path_.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (fd_ == -1)
     {
-        spdlog::error("failed to open aof file {}: {}", path_, strerror(errno));
+        spdlog::error("[AOF.cpp::AOF::open] failed to open aof file {}: {}", path_, strerror(errno));
         return false;
     }
     return true;
@@ -27,7 +27,7 @@ void AOF::close()
 
     int res = ::close(fd_);
     if (res == -1)
-        spdlog::error("failed to close aof fd {}: {}", fd_, strerror(errno));
+        spdlog::error("[AOF.cpp::AOF::close] failed to close aof fd {}: {}", fd_, strerror(errno));
     fd_ = -1;
 }
 
@@ -39,7 +39,7 @@ bool AOF::append(string_view command)
     ssize_t written = ::write(fd_, command.data(), command.size());
     if (written != static_cast<ssize_t>(command.size()))
     {
-        spdlog::error("failed to write to aof file: {}", written < 0 ? strerror(errno) : "short write");
+        spdlog::error("[AOF.cpp::AOF::append] failed to write to aof file: {}", written < 0 ? strerror(errno) : "short write");
         return false;
     }
     return true;
@@ -51,7 +51,7 @@ bool AOF::fsync()
         return false;
     if (::fsync(fd_) == -1)
     {
-        spdlog::error("failed to fsync aof file: {}", strerror(errno));
+        spdlog::error("[AOF.cpp::AOF::fsync] failed to fsync aof file: {}", strerror(errno));
         return false;
     }
     return true;
@@ -64,7 +64,7 @@ bool AOF::truncate()
 
     if (ftruncate(fd_, 0) == -1)
     {
-        spdlog::error("failed to truncate aof file: {}", strerror(errno));
+        spdlog::error("[AOF.cpp::AOF::truncate] failed to truncate aof file: {}", strerror(errno));
         return false;
     }
     return true;

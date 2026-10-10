@@ -17,7 +17,7 @@ bool TcpServer::start()
     server_socket_ = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket_ == -1)
     {
-        spdlog::error("failed to create socket: {}", strerror(errno));
+        spdlog::error("[TcpServer.cpp::TcpServer::start] failed to create socket: {}", strerror(errno));
         return false;
     }
 
@@ -29,19 +29,19 @@ bool TcpServer::start()
     int opt = 1;
     if (setsockopt(server_socket_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
     {
-        spdlog::error("setsockopt SO_REUSEADDR failed: {}", strerror(errno));
+        spdlog::error("[TcpServer.cpp::TcpServer::start] setsockopt SO_REUSEADDR failed: {}", strerror(errno));
         return false;
     }
 
     if (bind(server_socket_, (struct sockaddr *)&server_address, sizeof(server_address)) == -1)
     {
-        spdlog::error("failed to bind to port {}: {}", port_, strerror(errno));
+        spdlog::error("[TcpServer.cpp::TcpServer::start] failed to bind to port {}: {}", port_, strerror(errno));
         return false;
     }
 
     if (listen(server_socket_, SOMAXCONN) == -1)
     {
-        spdlog::error("failed to listen on port {}: {}", port_, strerror(errno));
+        spdlog::error("[TcpServer.cpp::TcpServer::start] failed to listen on port {}: {}", port_, strerror(errno));
         return false;
     }
 

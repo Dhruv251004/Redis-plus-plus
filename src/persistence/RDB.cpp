@@ -43,7 +43,7 @@ bool RDB::write(const Database &db)
     int fd = open(tmp_file_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if (fd < 0)
     {
-        spdlog::error("failed to open dump tmp file {}: {}", tmp_file_path, strerror(errno));
+        spdlog::error("[RDB.cpp::RDB::write] failed to open dump tmp file {}: {}", tmp_file_path, strerror(errno));
         return false;
     }
 
@@ -56,7 +56,7 @@ bool RDB::write(const Database &db)
 
         if (res <= 0)
         {
-            spdlog::error("failed to write dump to file: {}", res < 0 ? strerror(errno) : "short write");
+            spdlog::error("[RDB.cpp::RDB::write] failed to write dump to file: {}", res < 0 ? strerror(errno) : "short write");
             close(fd);
             return false;
         }
@@ -66,20 +66,20 @@ bool RDB::write(const Database &db)
 
     if (fsync(fd) < 0)
     {
-        spdlog::error("failed to fsync dump file: {}", strerror(errno));
+        spdlog::error("[RDB.cpp::RDB::write] failed to fsync dump file: {}", strerror(errno));
         close(fd);
         return false;
     }
     if (close(fd) < 0)
     {
-        spdlog::error("failed to close dump file: {}", strerror(errno));
+        spdlog::error("[RDB.cpp::RDB::write] failed to close dump file: {}", strerror(errno));
         return false;
     }
 
     // atomically replace the old file
     if (rename(tmp_file_path.c_str(), path_.c_str()) == -1)
     {
-        spdlog::error("failed to rename {} to {}: {}", tmp_file_path, path_, strerror(errno));
+        spdlog::error("[RDB.cpp::RDB::write] failed to rename {} to {}: {}", tmp_file_path, path_, strerror(errno));
         unlink(tmp_file_path.c_str());
         return false;
     }
@@ -94,7 +94,7 @@ bool RDB::read(Database &db)
     {
         if (access(path_.c_str(), F_OK) == 0)
         {
-            spdlog::error("failed to open dump file {}: {}", path_, strerror(errno));
+            spdlog::error("[RDB.cpp::RDB::read] failed to open dump file {}: {}", path_, strerror(errno));
             return false;
         }
         // file created first time - nothing to read
@@ -114,7 +114,7 @@ bool RDB::read(Database &db)
 
     if (bytes_read < 0)
     {
-        spdlog::error("failed to read dump file {}: {}", path_, strerror(errno));
+        spdlog::error("[RDB.cpp::RDB::read] failed to read dump file {}: {}", path_, strerror(errno));
         close(fd);
         return false;
     }
@@ -127,14 +127,14 @@ bool RDB::read(Database &db)
 
     if (close(fd) < 0)
     {
-        spdlog::error("failed to close dump file {}: {}", path_, strerror(errno));
+        spdlog::error("[RDB.cpp::RDB::read] failed to close dump file {}: {}", path_, strerror(errno));
         return false;
     }
 
     // Validate before modifying the database
     if (!validate(reader))
     {
-        spdlog::error("corrupted dump file {}", path_);
+        spdlog::error("[RDB.cpp::RDB::read] corrupted dump file {}", path_);
         return false;
     }
 

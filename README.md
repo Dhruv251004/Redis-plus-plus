@@ -14,7 +14,7 @@ A from-scratch C++17 reimplementation of a Redis-like in-memory key-value server
   - **AOF** (`data/appendonly.aof`): every successful write command is appended and replayed on startup
   - **RDB snapshot** (`data/dump.rdb`): the whole dataset is saved every 300 seconds, in a custom binary format with a CRC32 checksum. The snapshot is written to a temp file, fsynced, then atomically renamed over the old one. After a successful snapshot the AOF is truncated
   - On startup the snapshot is validated and loaded first, then the AOF is replayed on top of it
-- Leveled logging with [spdlog](https://github.com/gabime/spdlog) (`error` for failures, `warn` for bad input and corrupted data, `info` for lifecycle events). `warn` and `info` messages are tagged `[file::Class::function]`
+- Leveled logging with [spdlog](https://github.com/gabime/spdlog) (`error` for failures, `warn` for bad input and corrupted data, `info` for lifecycle events). Every message is tagged with where it came from as `[file::Class::function]`, e.g. `[RDB.cpp::RDB::write] failed to rename ...`
 - Graceful-ish handling of client disconnects, partial reads, and protocol errors
 
 Listens on the standard Redis port **6379**.

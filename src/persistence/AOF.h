@@ -27,7 +27,7 @@ public:
         if (read_fd == -1)
         {
             if (errno != ENOENT)
-                spdlog::error("failed to open aof file for replay {}: {}", path_, strerror(errno));
+                spdlog::error("[AOF.h::AOF::replay] failed to open aof file for replay {}: {}", path_, strerror(errno));
             return;
         }
 
@@ -41,7 +41,7 @@ public:
         }
 
         if (bytes_read < 0)
-            spdlog::error("failed to read aof file {}: {}", path_, strerror(errno));
+            spdlog::error("[AOF.h::AOF::replay] failed to read aof file {}: {}", path_, strerror(errno));
 
         ::close(read_fd);
 
