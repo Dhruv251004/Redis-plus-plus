@@ -19,10 +19,12 @@ public:
     static bool is_write_command(const string &);
     void persist_in_db(const RespValue &, const RespValue &);
     bool save_snapshot();
+    bool add_timer();
 
 private:
     static const unordered_set<string> write_command_;
     int epoll_fd_;
+    int timer_fd_;
     TcpServer tcp_server_;
     ConnectionManager connection_manager_;
     Database db_;

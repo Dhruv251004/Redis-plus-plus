@@ -25,33 +25,27 @@ void ByteBuffer::write_u8(uint8_t num)
 
 void ByteBuffer::write_u16(uint16_t num)
 {
-    uint8_t mask = 255;
     for (int i = 1; i >= 0; i--)
     {
-        uint8_t tmp_mask = mask << (i * 8);
-        uint8_t byte = (num & tmp_mask) >> (i * 8);
+        uint8_t byte = static_cast<uint8_t>((num >> (i * 8)) & 0xFF);
         buffer_.push_back(byte);
     }
 }
 
 void ByteBuffer::write_u32(uint32_t num)
 {
-    uint8_t mask = 255;
     for (int i = 3; i >= 0; i--)
     {
-        uint8_t tmp_mask = mask << (i * 8);
-        uint8_t byte = (num & tmp_mask) >> (i * 8);
+        uint8_t byte = static_cast<uint8_t>((num >> (i * 8)) & 0xFF);
         buffer_.push_back(byte);
     }
 }
 
 void ByteBuffer::write_u64(uint64_t num)
 {
-    uint8_t mask = 255;
     for (int i = 7; i >= 0; i--)
     {
-        uint8_t tmp_mask = mask << (i * 8);
-        uint8_t byte = (num & tmp_mask) >> (i * 8);
+        uint8_t byte = static_cast<uint8_t>((num >> (i * 8)) & 0xFF);
         buffer_.push_back(byte);
     }
 }

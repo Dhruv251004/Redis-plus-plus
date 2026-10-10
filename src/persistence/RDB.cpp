@@ -89,8 +89,14 @@ bool RDB::read(Database &db)
     int fd = open(path_.c_str(), O_RDONLY);
     if (fd == -1)
     {
-        cerr << "Failed to open file\n";
-        return false;
+        if (access(path_.c_str(), F_OK) == 0)
+        {
+            cerr << "Failed to open file\n";
+            return false;
+        }
+        // file created first time - nothing to read
+        cout << "file does not exist - creating one\n";
+        return true;
     }
 
     ByteBuffer reader;
@@ -110,8 +116,11 @@ bool RDB::read(Database &db)
         return false;
     }
 
-    if (bytes_read == 0) // in case of empty file just return true
+    if (reader.size() == 0) // in case of empty file just return true
+    {
+        cout << "empty file nothing to read\n";
         return true;
+    }
 
     if (close(fd) < 0)
     {
@@ -121,7 +130,10 @@ bool RDB::read(Database &db)
 
     // Validate before modifying the database
     if (!validate(reader))
+    {
+        cout << "corrupted dump file\n";
         return false;
+    }
 
     // Skip header and version
     reader.read_string(4);
@@ -171,51 +183,94 @@ bool RDB::read(Database &db)
 bool RDB::validate(ByteBuffer content)
 {
     if (content.size() < 4)
+    {
+        cout << "[validate] file too small\n";
         return false;
+    }
 
-    uint32_t checksum = content.crc32(0, content.size() - 4);
+    uint32_t checksum = content.crc32(0, content.size() - 5);
     auto header = content.read_string(4); // header ( 4 bytes )
     if (!header.has_value() || *header != "RDB1")
+    {
+        cout << "[validate] invalid header\n";
         return false;
+    }
 
     auto version = content.read_u8(); // version
     if (!version.has_value() || *version != 1)
+    {
+        cout << "[validate] invalid version\n";
         return false;
+    }
 
     auto num_keys = content.read_u64(); // num of keys
     if (!num_keys.has_value())
+    {
+        cout << "[validate] failed to read num_keys\n";
         return false;
+    }
 
     while (*num_keys > 0)
     {
         // Key info
         auto key_len = content.read_u32();
         if (!key_len.has_value())
+        {
+            cout << "[validate] failed to read key_len\n";
             return false;
+        }
         auto key = content.read_string(*key_len);
         if (!key.has_value())
+        {
+            cout << "[validate] failed to read key\n";
             return false;
+        }
 
         // Value info
         auto type = content.read_u8();
         if (!type.has_value() || !is_valid_value_type(*type))
+        {
+            cout << "[validate] invalid value type\n";
             return false;
+        }
         auto value_len = content.read_u64();
         if (!value_len.has_value())
+        {
+            cout << "[validate] failed to read value_len\n";
             return false;
+        }
         auto value = content.read_string(*value_len);
         if (!value.has_value())
+        {
+            cout << "[validate] failed to read value\n";
             return false;
+        }
         auto expiry = content.read_u64();
         if (!expiry.has_value())
+        {
+            cout << "[validate] failed to read expiry\n";
             return false;
+        }
 
         (*num_keys)--;
     }
 
     auto stored_checksum = content.read_u32();
-    if (!stored_checksum.has_value() || *stored_checksum != checksum || content.remaining_size() != 0)
+    if (!stored_checksum.has_value())
+    {
+        cout << "[validate] failed to read checksum\n";
         return false;
+    }
+    if (*stored_checksum != checksum)
+    {
+        cout << "[validate] checksum mismatch: stored=" << *stored_checksum << " computed=" << checksum << "\n";
+        return false;
+    }
+    if (content.remaining_size() != 0)
+    {
+        cout << "[validate] trailing bytes after checksum\n";
+        return false;
+    }
 
     return true;
 }

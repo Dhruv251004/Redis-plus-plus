@@ -1,5 +1,6 @@
 #include <cerrno>
 #include <iostream>
+#include <sys/timerfd.h>
 #include <sys/epoll.h>
 #include "RedisServer.h"
 #include "protocol/RespParser.h"
@@ -60,6 +61,12 @@ void RedisServer::start()
         return;
     }
 
+    if (!add_timer())
+    {
+        cerr << "failed to add timer for snapshot\n";
+        return;
+    }
+
     printWelcomeScreen();
 
     vector<epoll_event> events(MAX_EVENTS);
@@ -96,6 +103,21 @@ void RedisServer::start()
                 }
                 connection_manager_.add(client_fd);
                 cout << "New client connected: fd " << client_fd << "\n";
+            }
+            else if (current_fd == timer_fd_)
+            {
+                uint64_t expirations;
+                ssize_t n = ::read(timer_fd_, &expirations, sizeof(expirations));
+
+                if (n == sizeof(expirations))
+                {
+                    if (!save_snapshot())
+                        cerr << "Automatic snapshot failed\n";
+                }
+                else if (n == -1 && errno != EAGAIN && errno != EWOULDBLOCK)
+                {
+                    cerr << "Failed to read snapshot timer\n";
+                }
             }
             else
             {
@@ -231,6 +253,8 @@ void RedisServer::persist_in_db(const RespValue &input, const RespValue &output)
 
 bool RedisServer::save_snapshot()
 {
+    cout << "starting save db snapshot\n";
+
     // sync aof to db now dump db snapshot to rdb then clear the aof file
     if (!aof_.fsync())
         return false;
@@ -240,6 +264,42 @@ bool RedisServer::save_snapshot()
 
     if (!aof_.truncate())
         return false;
+
+    return true;
+}
+
+bool RedisServer::add_timer()
+{
+    timer_fd_ = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+    if (timer_fd_ == -1)
+    {
+        cerr << "timerfd_create failed\n";
+        return false;
+    }
+
+    itimerspec timer{};
+    timer.it_value.tv_sec = 30;
+    timer.it_interval.tv_sec = 30;
+
+    if (timerfd_settime(timer_fd_, 0, &timer, nullptr) == -1)
+    {
+        cerr << "timerfd_settime failed\n";
+        ::close(timer_fd_);
+        timer_fd_ = -1;
+        return false;
+    }
+
+    epoll_event ev{};
+    ev.data.fd = timer_fd_;
+    ev.events = EPOLLIN;
+
+    if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, timer_fd_, &ev) == -1)
+    {
+        cerr << "Failed to add timer to epoll\n";
+        ::close(timer_fd_);
+        timer_fd_ = -1;
+        return false;
+    }
 
     return true;
 }
