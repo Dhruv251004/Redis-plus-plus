@@ -278,8 +278,8 @@ bool RedisServer::add_timer()
     }
 
     itimerspec timer{};
-    timer.it_value.tv_sec = 30;
-    timer.it_interval.tv_sec = 30;
+    timer.it_value.tv_sec = 300;
+    timer.it_interval.tv_sec = 300;
 
     if (timerfd_settime(timer_fd_, 0, &timer, nullptr) == -1)
     {
