@@ -1,4 +1,6 @@
+#include <cerrno>
 #include <cstring>
+#include <spdlog/spdlog.h>
 #include <iostream>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -14,7 +16,10 @@ bool TcpServer::start()
 {
     server_socket_ = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket_ == -1)
+    {
+        spdlog::error("failed to create socket: {}", strerror(errno));
         return false;
+    }
 
     sockaddr_in server_address;
     server_address.sin_family = AF_INET;
@@ -23,14 +28,24 @@ bool TcpServer::start()
 
     int opt = 1;
     if (setsockopt(server_socket_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
+    {
+        spdlog::error("setsockopt SO_REUSEADDR failed: {}", strerror(errno));
         return false;
+    }
 
     if (bind(server_socket_, (struct sockaddr *)&server_address, sizeof(server_address)) == -1)
+    {
+        spdlog::error("failed to bind to port {}: {}", port_, strerror(errno));
         return false;
+    }
 
     if (listen(server_socket_, SOMAXCONN) == -1)
+    {
+        spdlog::error("failed to listen on port {}: {}", port_, strerror(errno));
         return false;
+    }
 
+    spdlog::info("[TcpServer.cpp::TcpServer::start] listening on port {}", port_);
     return true;
 }
 

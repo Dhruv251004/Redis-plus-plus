@@ -1,5 +1,7 @@
 #include <cerrno>
+#include <cstring>
 #include <iostream>
+#include <spdlog/spdlog.h>
 #include <sys/timerfd.h>
 #include <sys/epoll.h>
 #include "RedisServer.h"
@@ -24,29 +26,35 @@ void RedisServer::start()
 {
     bool res = tcp_server_.start();
     if (!res)
-        return;
-
-    if (!rdb_.read(db_))
     {
-        cerr << "failed to restore db snapshot\n";
+        spdlog::error("failed to start tcp server: {}", strerror(errno));
         return;
     }
 
+    if (!rdb_.read(db_))
+    {
+        spdlog::error("failed to restore db snapshot");
+        return;
+    }
+
+    spdlog::info("[RedisServer.cpp::RedisServer::start] db snapshot restored, {} keys loaded", db_.get_db_size());
+
     if (!aof_.open())
     {
-        cerr << "failed to open aof file\n";
+        spdlog::error("failed to open aof file");
         return;
     }
 
     // replay all messages
     aof_.replay([this](string_view cmd)
                 { handle_replay(cmd); });
+    spdlog::info("[RedisServer.cpp::RedisServer::start] aof replay finished, {} keys in db", db_.get_db_size());
 
     // Create epoll instance
     epoll_fd_ = epoll_create1(0);
     if (epoll_fd_ == -1)
     {
-        cerr << "Failed to create epoll instance\n";
+        spdlog::error("failed to create epoll instance: {}", strerror(errno));
         return;
     }
 
@@ -57,17 +65,18 @@ void RedisServer::start()
 
     if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, tcp_server_.fd(), &ev) == -1)
     {
-        cerr << "Failed to add server socket to epoll\n";
+        spdlog::error("failed to add server socket to epoll: {}", strerror(errno));
         return;
     }
 
     if (!add_timer())
     {
-        cerr << "failed to add timer for snapshot\n";
+        spdlog::error("failed to add timer for snapshot");
         return;
     }
 
     printWelcomeScreen();
+    spdlog::info("[RedisServer.cpp::RedisServer::start] server ready to accept connections");
 
     vector<epoll_event> events(MAX_EVENTS);
 
@@ -76,7 +85,7 @@ void RedisServer::start()
         int num_events = epoll_wait(epoll_fd_, events.data(), MAX_EVENTS, -1);
         if (num_events == -1)
         {
-            cerr << "epoll_wait error\n";
+            spdlog::error("epoll_wait error: {}", strerror(errno));
             break;
         }
 
@@ -88,7 +97,7 @@ void RedisServer::start()
                 int client_fd = tcp_server_.accept_client();
                 if (client_fd == -1)
                 {
-                    cerr << "Failed to accept client\n";
+                    spdlog::warn("[RedisServer.cpp::RedisServer::start] failed to accept client: {}", strerror(errno));
                     continue;
                 }
 
@@ -97,12 +106,12 @@ void RedisServer::start()
                 client_ev.data.fd = client_fd;
                 if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, client_fd, &client_ev) == -1)
                 {
-                    cerr << "Failed to add client socket to epoll\n";
+                    spdlog::error("failed to add client fd {} to epoll: {}", client_fd, strerror(errno));
                     tcp_server_.close_client(client_fd); // FIX
                     continue;
                 }
                 connection_manager_.add(client_fd);
-                cout << "New client connected: fd " << client_fd << "\n";
+                spdlog::info("[RedisServer.cpp::RedisServer::start] new client connected: fd {}", client_fd);
             }
             else if (current_fd == timer_fd_)
             {
@@ -112,11 +121,11 @@ void RedisServer::start()
                 if (n == sizeof(expirations))
                 {
                     if (!save_snapshot())
-                        cerr << "Automatic snapshot failed\n";
+                        spdlog::error("automatic snapshot failed");
                 }
                 else if (n == -1 && errno != EAGAIN && errno != EWOULDBLOCK)
                 {
-                    cerr << "Failed to read snapshot timer\n";
+                    spdlog::error("failed to read snapshot timer: {}", strerror(errno));
                 }
             }
             else
@@ -142,6 +151,7 @@ void RedisServer::handle_client(int client_fd)
                 break;
             if (parse_status == ParseStatus::Invalid)
             {
+                spdlog::warn("[RedisServer.cpp::RedisServer::handle_client] invalid request from client fd {}, closing connection", client_fd);
                 string err = RespSerializer::serialize(*input_resp);
                 tcp_server_.send_message(client_fd, err);
                 epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, client_fd, nullptr);
@@ -160,7 +170,7 @@ void RedisServer::handle_client(int client_fd)
 
             if (!tcp_server_.send_message(client_fd, output_msg))
             {
-                cerr << "Failed to send message to client fd: " << client_fd << endl;
+                spdlog::warn("[RedisServer.cpp::RedisServer::handle_client] failed to send message to client fd {}, closing connection", client_fd);
                 epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, client_fd, nullptr);
                 tcp_server_.close_client(client_fd);
                 connection_manager_.remove(client_fd);
@@ -173,6 +183,7 @@ void RedisServer::handle_client(int client_fd)
 
     if (bytes == 0)
     {
+        spdlog::info("[RedisServer.cpp::RedisServer::handle_client] client disconnected: fd {}", client_fd);
         epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, client_fd, nullptr);
         tcp_server_.close_client(client_fd);
         connection_manager_.remove(client_fd);
@@ -182,7 +193,7 @@ void RedisServer::handle_client(int client_fd)
     {
         return;
     }
-    cerr << "Read error on client fd: " << client_fd << endl;
+    spdlog::error("read error on client fd {}: {}", client_fd, strerror(errno));
     epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, client_fd, nullptr);
     tcp_server_.close_client(client_fd);
     connection_manager_.remove(client_fd);
@@ -195,12 +206,12 @@ void RedisServer::handle_replay(string_view cmds)
         auto [parse_status, input_resp, consumed] = RespParser::parse(cmds);
         if (parse_status == ParseStatus::Invalid)
         {
-            cerr << "Corrupted AOF entry. Skipping restore.\n";
+            spdlog::warn("[RedisServer.cpp::RedisServer::handle_replay] corrupted aof entry, skipping restore of remaining entries");
             return;
         }
         if (parse_status == ParseStatus::Incomplete)
         {
-            cerr << "Truncated AOF entry detected. Restore aborted.\n";
+            spdlog::warn("[RedisServer.cpp::RedisServer::handle_replay] truncated aof entry detected, restore aborted");
             return;
         }
 
@@ -248,23 +259,33 @@ void RedisServer::persist_in_db(const RespValue &input, const RespValue &output)
     }
 
     if (!aof_.append(entry))
-        cerr << "error persisting cmd\n";
+        spdlog::error("failed to append command to aof");
 }
 
 bool RedisServer::save_snapshot()
 {
-    cout << "starting save db snapshot\n";
+    spdlog::info("[RedisServer.cpp::RedisServer::save_snapshot] starting db snapshot");
 
     // sync aof to db now dump db snapshot to rdb then clear the aof file
     if (!aof_.fsync())
+    {
+        spdlog::error("snapshot aborted: aof fsync failed");
         return false;
+    }
 
     if (!rdb_.write(db_))
+    {
+        spdlog::error("snapshot aborted: rdb write failed");
         return false;
+    }
 
     if (!aof_.truncate())
+    {
+        spdlog::error("snapshot written but aof truncate failed");
         return false;
+    }
 
+    spdlog::info("[RedisServer.cpp::RedisServer::save_snapshot] db snapshot completed, {} keys saved", db_.get_db_size());
     return true;
 }
 
@@ -273,7 +294,7 @@ bool RedisServer::add_timer()
     timer_fd_ = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
     if (timer_fd_ == -1)
     {
-        cerr << "timerfd_create failed\n";
+        spdlog::error("timerfd_create failed: {}", strerror(errno));
         return false;
     }
 
@@ -283,7 +304,7 @@ bool RedisServer::add_timer()
 
     if (timerfd_settime(timer_fd_, 0, &timer, nullptr) == -1)
     {
-        cerr << "timerfd_settime failed\n";
+        spdlog::error("timerfd_settime failed: {}", strerror(errno));
         ::close(timer_fd_);
         timer_fd_ = -1;
         return false;
@@ -295,7 +316,7 @@ bool RedisServer::add_timer()
 
     if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, timer_fd_, &ev) == -1)
     {
-        cerr << "Failed to add timer to epoll\n";
+        spdlog::error("failed to add timer to epoll: {}", strerror(errno));
         ::close(timer_fd_);
         timer_fd_ = -1;
         return false;

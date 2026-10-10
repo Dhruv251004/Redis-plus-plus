@@ -1,4 +1,6 @@
+#include <cstring>
 #include <fcntl.h>
+#include <spdlog/spdlog.h>
 #include <unistd.h>
 #include "RDB.h"
 #include "database/Database.h"
@@ -41,7 +43,7 @@ bool RDB::write(const Database &db)
     int fd = open(tmp_file_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if (fd < 0)
     {
-        cerr << "failed to open dump file\n";
+        spdlog::error("failed to open dump tmp file {}: {}", tmp_file_path, strerror(errno));
         return false;
     }
 
@@ -54,7 +56,7 @@ bool RDB::write(const Database &db)
 
         if (res <= 0)
         {
-            cerr << "failed to write dump to file\n";
+            spdlog::error("failed to write dump to file: {}", res < 0 ? strerror(errno) : "short write");
             close(fd);
             return false;
         }
@@ -64,19 +66,20 @@ bool RDB::write(const Database &db)
 
     if (fsync(fd) < 0)
     {
-        cerr << "failed to save dump file\n";
+        spdlog::error("failed to fsync dump file: {}", strerror(errno));
         close(fd);
         return false;
     }
     if (close(fd) < 0)
     {
-        cerr << "failed to close dump file\n";
+        spdlog::error("failed to close dump file: {}", strerror(errno));
         return false;
     }
 
     // atomically replace the old file
     if (rename(tmp_file_path.c_str(), path_.c_str()) == -1)
     {
+        spdlog::error("failed to rename {} to {}: {}", tmp_file_path, path_, strerror(errno));
         unlink(tmp_file_path.c_str());
         return false;
     }
@@ -91,11 +94,11 @@ bool RDB::read(Database &db)
     {
         if (access(path_.c_str(), F_OK) == 0)
         {
-            cerr << "Failed to open file\n";
+            spdlog::error("failed to open dump file {}: {}", path_, strerror(errno));
             return false;
         }
         // file created first time - nothing to read
-        cout << "file does not exist - creating one\n";
+        spdlog::info("[RDB.cpp::RDB::read] dump file {} does not exist, starting with empty db", path_);
         return true;
     }
 
@@ -111,27 +114,27 @@ bool RDB::read(Database &db)
 
     if (bytes_read < 0)
     {
-        cerr << "Failed to read file\n";
+        spdlog::error("failed to read dump file {}: {}", path_, strerror(errno));
         close(fd);
         return false;
     }
 
     if (reader.size() == 0) // in case of empty file just return true
     {
-        cout << "empty file nothing to read\n";
+        spdlog::info("[RDB.cpp::RDB::read] dump file {} is empty, nothing to load", path_);
         return true;
     }
 
     if (close(fd) < 0)
     {
-        cerr << "Failed to close file\n";
+        spdlog::error("failed to close dump file {}: {}", path_, strerror(errno));
         return false;
     }
 
     // Validate before modifying the database
     if (!validate(reader))
     {
-        cout << "corrupted dump file\n";
+        spdlog::error("corrupted dump file {}", path_);
         return false;
     }
 
@@ -184,7 +187,7 @@ bool RDB::validate(ByteBuffer content)
 {
     if (content.size() < 4)
     {
-        cout << "[validate] file too small\n";
+        spdlog::warn("[RDB.cpp::RDB::validate] file too small");
         return false;
     }
 
@@ -192,21 +195,21 @@ bool RDB::validate(ByteBuffer content)
     auto header = content.read_string(4); // header ( 4 bytes )
     if (!header.has_value() || *header != "RDB1")
     {
-        cout << "[validate] invalid header\n";
+        spdlog::warn("[RDB.cpp::RDB::validate] invalid header");
         return false;
     }
 
     auto version = content.read_u8(); // version
     if (!version.has_value() || *version != 1)
     {
-        cout << "[validate] invalid version\n";
+        spdlog::warn("[RDB.cpp::RDB::validate] invalid version");
         return false;
     }
 
     auto num_keys = content.read_u64(); // num of keys
     if (!num_keys.has_value())
     {
-        cout << "[validate] failed to read num_keys\n";
+        spdlog::warn("[RDB.cpp::RDB::validate] failed to read num_keys");
         return false;
     }
 
@@ -216,13 +219,13 @@ bool RDB::validate(ByteBuffer content)
         auto key_len = content.read_u32();
         if (!key_len.has_value())
         {
-            cout << "[validate] failed to read key_len\n";
+            spdlog::warn("[RDB.cpp::RDB::validate] failed to read key_len");
             return false;
         }
         auto key = content.read_string(*key_len);
         if (!key.has_value())
         {
-            cout << "[validate] failed to read key\n";
+            spdlog::warn("[RDB.cpp::RDB::validate] failed to read key");
             return false;
         }
 
@@ -230,25 +233,25 @@ bool RDB::validate(ByteBuffer content)
         auto type = content.read_u8();
         if (!type.has_value() || !is_valid_value_type(*type))
         {
-            cout << "[validate] invalid value type\n";
+            spdlog::warn("[RDB.cpp::RDB::validate] invalid value type");
             return false;
         }
         auto value_len = content.read_u64();
         if (!value_len.has_value())
         {
-            cout << "[validate] failed to read value_len\n";
+            spdlog::warn("[RDB.cpp::RDB::validate] failed to read value_len");
             return false;
         }
         auto value = content.read_string(*value_len);
         if (!value.has_value())
         {
-            cout << "[validate] failed to read value\n";
+            spdlog::warn("[RDB.cpp::RDB::validate] failed to read value");
             return false;
         }
         auto expiry = content.read_u64();
         if (!expiry.has_value())
         {
-            cout << "[validate] failed to read expiry\n";
+            spdlog::warn("[RDB.cpp::RDB::validate] failed to read expiry");
             return false;
         }
 
@@ -258,17 +261,17 @@ bool RDB::validate(ByteBuffer content)
     auto stored_checksum = content.read_u32();
     if (!stored_checksum.has_value())
     {
-        cout << "[validate] failed to read checksum\n";
+        spdlog::warn("[RDB.cpp::RDB::validate] failed to read checksum");
         return false;
     }
     if (*stored_checksum != checksum)
     {
-        cout << "[validate] checksum mismatch: stored=" << *stored_checksum << " computed=" << checksum << "\n";
+        spdlog::warn("[RDB.cpp::RDB::validate] checksum mismatch: stored={} computed={}", *stored_checksum, checksum);
         return false;
     }
     if (content.remaining_size() != 0)
     {
-        cout << "[validate] trailing bytes after checksum\n";
+        spdlog::warn("[RDB.cpp::RDB::validate] trailing bytes after checksum");
         return false;
     }
 

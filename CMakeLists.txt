@@ -8,6 +8,14 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(ZLIB REQUIRED)
 
+include(FetchContent)
+FetchContent_Declare(spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog.git
+    GIT_TAG v1.15.3
+    FIND_PACKAGE_ARGS
+)
+FetchContent_MakeAvailable(spdlog)
+
 add_executable(redispp
     src/main.cpp
     src/network/TcpServer.cpp
@@ -33,7 +41,7 @@ target_include_directories(redispp PRIVATE
     src
 )
 
-target_link_libraries(redispp PRIVATE ZLIB::ZLIB)
+target_link_libraries(redispp PRIVATE ZLIB::ZLIB spdlog::spdlog)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(redispp PRIVATE
