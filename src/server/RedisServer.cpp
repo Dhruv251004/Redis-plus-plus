@@ -143,10 +143,10 @@ void RedisServer::handle_client(int client_fd)
 
     if (bytes > 0)
     {
-        conn.append_data(msg);
+        conn.append_read_data(msg);
         while (true)
         {
-            auto [parse_status, input_resp, consumed] = RespParser::parse(conn.buffer());
+            auto [parse_status, input_resp, consumed] = RespParser::parse(conn.read_buffer());
             if (parse_status == ParseStatus::Incomplete)
                 break;
             if (parse_status == ParseStatus::Invalid)
@@ -166,7 +166,7 @@ void RedisServer::handle_client(int client_fd)
             // persist in db
             persist_in_db(*input_resp, output_resp);
             string output_msg = RespSerializer::serialize(output_resp);
-            conn.consume(consumed);
+            conn.consume_read_buffer(consumed);
 
             if (!tcp_server_.send_message(client_fd, output_msg))
             {
