@@ -51,7 +51,7 @@ bool TcpServer::start()
 
 int TcpServer::accept_client()
 {
-    return accept(server_socket_, nullptr, nullptr);
+    return accept4(server_socket_, nullptr, nullptr, SOCK_NONBLOCK);
 }
 
 pair<int, string> TcpServer::receive_message(int client_id)
@@ -69,9 +69,15 @@ ssize_t TcpServer::send_message(int client_id, string_view msg)
 
     while (total_sent < msg.size())
     {
-        ssize_t sent = send(client_id, msg.data() + total_sent, msg.size() - total_sent, 0);
+        ssize_t sent = send(client_id, msg.data() + total_sent, msg.size() - total_sent, MSG_NOSIGNAL);
         if (sent <= 0)
-            return total_sent;
+        {
+            // Report partial progress first; the caller sees the error (errno) on its next attempt.
+            // With nothing sent, pass the raw result through so 0 and -1/EAGAIN stay distinguishable.
+            if (total_sent > 0)
+                return total_sent;
+            return sent;
+        }
         total_sent += sent;
     }
 

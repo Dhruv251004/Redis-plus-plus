@@ -175,6 +175,10 @@ void RedisServer::handle_client(int client_fd, uint32_t event)
 
 bool RedisServer::handle_read_client(int client_fd, Connection &conn)
 {
+    // The connection is closing once its pending reply is flushed, so ignore further input.
+    if (conn.close_after_write())
+        return true;
+
     auto [bytes, msg] = tcp_server_.receive_message(client_fd);
 
     if (bytes > 0)
@@ -257,7 +261,9 @@ bool RedisServer::handle_write_client(int client_fd, Connection &conn)
 
         if (errno == EAGAIN || errno == EWOULDBLOCK)
         {
-            if (!update_event(client_fd, EPOLLIN | EPOLLOUT))
+            // While closing, stop watching EPOLLIN: unread input would keep waking the loop.
+            uint32_t events = conn.close_after_write() ? EPOLLOUT : (EPOLLIN | EPOLLOUT);
+            if (!update_event(client_fd, events))
             {
                 if (!close_client(client_fd))
                     spdlog::error("[RedisServer.cpp::RedisServer::handle_write_client] cleanup encountered an error for fd {}", client_fd);
