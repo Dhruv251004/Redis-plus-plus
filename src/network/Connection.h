@@ -12,11 +12,16 @@ public:
     void consume_read_buffer(size_t);
     void append_read_data(string_view);
     string_view read_buffer() const;
+    bool has_read_data() const;
 
     // send buffer
     void consume_write_buffer(size_t);
     void append_write_data(string_view);
     string_view write_buffer() const;
+    bool has_write_data() const;
+
+    void set_close_after_write(bool);
+    bool close_after_write() const;
 
 private:
     int socket_fd_;
@@ -26,4 +31,6 @@ private:
 
     string write_buffer_;
     int write_buffer_offset_;
+
+    bool close_after_write_;
 };

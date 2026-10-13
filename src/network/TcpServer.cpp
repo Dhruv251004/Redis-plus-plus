@@ -63,7 +63,7 @@ pair<int, string> TcpServer::receive_message(int client_id)
     return {bytes, string(buffer, bytes)};
 }
 
-bool TcpServer::send_message(int client_id, string_view msg)
+ssize_t TcpServer::send_message(int client_id, string_view msg)
 {
     size_t total_sent = 0;
 
@@ -71,11 +71,11 @@ bool TcpServer::send_message(int client_id, string_view msg)
     {
         ssize_t sent = send(client_id, msg.data() + total_sent, msg.size() - total_sent, 0);
         if (sent <= 0)
-            return false;
+            return total_sent;
         total_sent += sent;
     }
 
-    return true;
+    return total_sent;
 }
 
 bool TcpServer::close_client(int client_id)

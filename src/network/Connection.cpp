@@ -2,7 +2,7 @@
 
 constexpr int COMPACT_THRESHOLD = 4096;
 
-Connection::Connection(int socket_fd) : socket_fd_(socket_fd), read_buffer_(""), read_buffer_offset_(0), write_buffer_(""), write_buffer_offset_(0) {}
+Connection::Connection(int socket_fd) : socket_fd_(socket_fd), read_buffer_(""), read_buffer_offset_(0), write_buffer_(""), write_buffer_offset_(0), close_after_write_(false) {}
 
 int Connection::fd() const
 {
@@ -36,6 +36,11 @@ void Connection::append_read_data(string_view bytes)
     read_buffer_ += bytes;
 }
 
+bool Connection::has_read_data() const
+{
+    return read_buffer_offset_ < int(read_buffer_.size());
+}
+
 void Connection::consume_write_buffer(size_t bytes)
 {
     if (bytes + write_buffer_offset_ >= write_buffer_.size())
@@ -61,4 +66,19 @@ string_view Connection::write_buffer() const
 void Connection::append_write_data(string_view bytes)
 {
     write_buffer_ += bytes;
+}
+
+bool Connection::has_write_data() const
+{
+    return write_buffer_offset_ < int(write_buffer_.size());
+}
+
+void Connection::set_close_after_write(bool val)
+{
+    close_after_write_ = val;
+}
+
+bool Connection::close_after_write() const
+{
+    return close_after_write_;
 }

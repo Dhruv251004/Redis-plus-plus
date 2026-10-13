@@ -14,7 +14,12 @@ public:
     RedisServer(int);
     void start();
     void stop();
-    void handle_client(int);
+    void handle_client(int, uint32_t);
+    bool handle_read_client(int, Connection &);
+    bool handle_write_client(int, Connection &);
+    bool update_event(int, uint32_t);
+    bool close_client(int);
+
     void handle_replay(string_view);
     static bool is_write_command(const string &);
     void persist_in_db(const RespValue &, const RespValue &);

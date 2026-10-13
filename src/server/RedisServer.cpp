@@ -85,6 +85,8 @@ void RedisServer::start()
         int num_events = epoll_wait(epoll_fd_, events.data(), MAX_EVENTS, -1);
         if (num_events == -1)
         {
+            if (errno == EINTR)
+                continue;
             spdlog::error("[RedisServer.cpp::RedisServer::start] epoll_wait error: {}", strerror(errno));
             break;
         }
@@ -130,15 +132,49 @@ void RedisServer::start()
             }
             else
             {
-                handle_client(current_fd);
+                handle_client(current_fd, events[i].events);
             }
         }
     }
 }
 
-void RedisServer::handle_client(int client_fd)
+void RedisServer::handle_client(int client_fd, uint32_t event)
 {
+    // Handle socket errors and disconnects first.
+    if (event & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))
+    {
+        if (!close_client(client_fd))
+        {
+            spdlog::error("[RedisServer.cpp::RedisServer::handle_client] failed to completely close client fd {}", client_fd);
+        }
+        return;
+    }
+
+    // Obtain the connection only after handling early disconnects.
     Connection &conn = connection_manager_.get(client_fd);
+
+    // 1. Read incoming data and queue responses.
+    if (event & EPOLLIN)
+    {
+        if (!handle_read_client(client_fd, conn))
+        {
+            // The handler closed the connection or encountered a fatal error.
+            return;
+        }
+    }
+
+    if (conn.has_write_data())
+    {
+        if (!handle_write_client(client_fd, conn))
+        {
+            // The handler closed the connection or failed to update epoll.
+            return;
+        }
+    }
+}
+
+bool RedisServer::handle_read_client(int client_fd, Connection &conn)
+{
     auto [bytes, msg] = tcp_server_.receive_message(client_fd);
 
     if (bytes > 0)
@@ -151,13 +187,12 @@ void RedisServer::handle_client(int client_fd)
                 break;
             if (parse_status == ParseStatus::Invalid)
             {
-                spdlog::warn("[RedisServer.cpp::RedisServer::handle_client] invalid request from client fd {} ({}), closing connection", client_fd, input_resp->data());
+                spdlog::warn("[RedisServer.cpp::RedisServer::handle_read_client] invalid request from client fd {} ({}), closing connection", client_fd, input_resp->data());
                 string err = RespSerializer::serialize(*input_resp);
-                tcp_server_.send_message(client_fd, err);
-                epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, client_fd, nullptr);
-                tcp_server_.close_client(client_fd);
-                connection_manager_.remove(client_fd);
-                return;
+
+                conn.append_write_data(err);
+                conn.set_close_after_write(true);
+                return true;
             }
 
             // persist in memeory
@@ -166,37 +201,93 @@ void RedisServer::handle_client(int client_fd)
             // persist in db
             persist_in_db(*input_resp, output_resp);
             string output_msg = RespSerializer::serialize(output_resp);
-            conn.consume_read_buffer(consumed);
 
-            if (!tcp_server_.send_message(client_fd, output_msg))
-            {
-                spdlog::warn("[RedisServer.cpp::RedisServer::handle_client] failed to send reply to client fd {}, closing connection", client_fd);
-                epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, client_fd, nullptr);
-                tcp_server_.close_client(client_fd);
-                connection_manager_.remove(client_fd);
-                return;
-            }
+            // remove from read and append to write
+            conn.consume_read_buffer(consumed);
+            conn.append_write_data(output_msg);
         }
 
-        return;
+        return true;
     }
 
     if (bytes == 0)
     {
-        spdlog::info("[RedisServer.cpp::RedisServer::handle_client] client disconnected: fd {}", client_fd);
-        epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, client_fd, nullptr);
-        tcp_server_.close_client(client_fd);
-        connection_manager_.remove(client_fd);
-        return;
+        spdlog::info("[RedisServer.cpp::RedisServer::handle_read_client] client disconnected: fd {}", client_fd);
+        // Handle connection error/disconnect.
+        if (!close_client(client_fd))
+            spdlog::error("[RedisServer.cpp::RedisServer::handle_read_client] cleanup encountered an error for fd {}", client_fd);
+
+        return false;
     }
-    if (errno == EAGAIN || errno == EWOULDBLOCK)
+
+    if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+        return true;
+
+    spdlog::error("[RedisServer.cpp::RedisServer::handle_read_client] read error on client fd {}: {}", client_fd, strerror(errno));
+    // Handle connection error/disconnect.
+    if (!close_client(client_fd))
+        spdlog::error("[RedisServer.cpp::RedisServer::handle_read_client] cleanup encountered an error for fd {}", client_fd);
+
+    return false;
+}
+
+bool RedisServer::handle_write_client(int client_fd, Connection &conn)
+{
+    while (conn.has_write_data())
     {
-        return;
+        string_view write_data = conn.write_buffer();
+        ssize_t bytes_wrote = tcp_server_.send_message(client_fd, write_data);
+        if (bytes_wrote > 0)
+        {
+            conn.consume_write_buffer(bytes_wrote);
+            continue;
+        }
+
+        if (bytes_wrote == 0)
+        {
+            spdlog::warn("[RedisServer.cpp::RedisServer::handle_write_client] send returned 0 with pending data for fd {}, closing connection", client_fd);
+            // Handle connection error/disconnect.
+            if (!close_client(client_fd))
+                spdlog::error("[RedisServer.cpp::RedisServer::handle_write_client] cleanup encountered an error for fd {}", client_fd);
+            return false;
+        }
+
+        if (errno == EINTR)
+            continue;
+
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+        {
+            if (!update_event(client_fd, EPOLLIN | EPOLLOUT))
+            {
+                if (!close_client(client_fd))
+                    spdlog::error("[RedisServer.cpp::RedisServer::handle_write_client] cleanup encountered an error for fd {}", client_fd);
+                return false;
+            }
+            return true;
+        }
+        else
+        {
+            spdlog::warn("[RedisServer.cpp::RedisServer::handle_write_client] failed to send reply to client fd {}, closing connection", client_fd);
+            // Handle connection error/disconnect.
+            if (!close_client(client_fd))
+                spdlog::error("[RedisServer.cpp::RedisServer::handle_write_client] cleanup encountered an error for fd {}", client_fd);
+            return false;
+        }
     }
-    spdlog::error("[RedisServer.cpp::RedisServer::handle_client] read error on client fd {}: {}", client_fd, strerror(errno));
-    epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, client_fd, nullptr);
-    tcp_server_.close_client(client_fd);
-    connection_manager_.remove(client_fd);
+    if (!update_event(client_fd, EPOLLIN))
+    {
+        if (!close_client(client_fd))
+            spdlog::error("[RedisServer.cpp::RedisServer::handle_write_client] cleanup encountered an error for fd {}", client_fd);
+        return false;
+    }
+
+    if (conn.close_after_write())
+    {
+        if (!close_client(client_fd))
+            spdlog::error("[RedisServer.cpp::RedisServer::handle_write_client] cleanup encountered an error for fd {}", client_fd);
+        return false;
+    }
+    return true;
 }
 
 void RedisServer::handle_replay(string_view cmds)
@@ -323,4 +414,37 @@ bool RedisServer::add_timer()
     }
 
     return true;
+}
+
+bool RedisServer::update_event(int client_fd, uint32_t events)
+{
+    epoll_event ev{};
+    ev.events = events;
+    ev.data.fd = client_fd;
+
+    return epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, client_fd, &ev) == 0;
+}
+
+bool RedisServer::close_client(int client_fd)
+{
+    bool success = true;
+
+    if (epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, client_fd, nullptr) == -1)
+    {
+        if (errno != ENOENT && errno != EBADF)
+        {
+            spdlog::error("[RedisServer::close_client] epoll_ctl DEL failed for fd {}: {}", client_fd, strerror(errno));
+            success = false;
+        }
+    }
+
+    if (!tcp_server_.close_client(client_fd))
+    {
+        spdlog::error("[RedisServer::close_client] failed to close fd {}", client_fd);
+        success = false;
+    }
+
+    connection_manager_.remove(client_fd);
+
+    return success;
 }

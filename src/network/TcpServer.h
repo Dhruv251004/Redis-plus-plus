@@ -12,7 +12,7 @@ public:
     int fd();
     void stop();
     pair<int, string> receive_message(int);
-    bool send_message(int, string_view);
+    ssize_t send_message(int, string_view);
     bool close_client(int);
 
 private:
