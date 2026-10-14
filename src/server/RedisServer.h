@@ -7,6 +7,7 @@
 #include "database/Database.h"
 #include "persistence/AOF.h"
 #include "persistence/RDB.h"
+#include "pubsub/PubSubManager.h"
 
 class RedisServer
 {
@@ -21,6 +22,7 @@ public:
     bool close_client(int);
 
     void handle_replay(string_view);
+    void handle_notify_event(int, Connection &);
     static bool is_write_command(const string &);
     void persist_in_db(const RespValue &, const RespValue &);
     bool save_snapshot();
@@ -36,4 +38,5 @@ private:
     AOF aof_;
     CommandExecutor command_executor_;
     RDB rdb_;
+    PubSubManager pub_sub_manager_;
 };

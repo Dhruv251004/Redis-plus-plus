@@ -20,7 +20,11 @@ constexpr int MAX_EVENTS = 64;
 
 const unordered_set<string> RedisServer::write_command_ = {"SET", "DEL", "EXPIRE", "EXPIREAT", "PEXPIREAT", "PERSIST"};
 
-RedisServer::RedisServer(int port) : tcp_server_(port), db_(), aof_(BASE_DB_PATH + "/" + AOF_FILE_NAME), command_executor_(db_, aof_), rdb_(BASE_DB_PATH + "/" + RDB_FILE_NAME) {}
+RedisServer::RedisServer(int port) : tcp_server_(port), db_(), aof_(BASE_DB_PATH + "/" + AOF_FILE_NAME), command_executor_(db_, aof_), rdb_(BASE_DB_PATH + "/" + RDB_FILE_NAME), pub_sub_manager_(connection_manager_)
+{
+    connection_manager_.set_notify_handler([this](int client_fd, Connection &conn)
+                                           { handle_notify_event(client_fd, conn); });
+}
 
 void RedisServer::start()
 {
@@ -450,7 +454,15 @@ bool RedisServer::close_client(int client_fd)
         success = false;
     }
 
+    // Drop the fd from every topic so publish never targets a closed (or reused) fd.
+    pub_sub_manager_.remove_all_subscriptions(client_fd);
     connection_manager_.remove(client_fd);
 
     return success;
+}
+
+void RedisServer::handle_notify_event(int client_fd, Connection &conn)
+{
+    //  currently it only handles append to write buffer but later can be genralized to any sort of event
+    handle_write_client(client_fd, conn);
 }

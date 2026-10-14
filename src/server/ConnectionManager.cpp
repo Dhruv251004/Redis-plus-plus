@@ -24,3 +24,13 @@ size_t ConnectionManager::size() const
 {
     return connections_.size();
 }
+
+void ConnectionManager::notify_event(int client_fd, Connection &conn)
+{
+    notify_handler_(client_fd, conn);
+}
+
+void ConnectionManager::set_notify_handler(function<void(int, Connection &)> notify_handler)
+{
+    notify_handler_ = std::move(notify_handler);
+}
