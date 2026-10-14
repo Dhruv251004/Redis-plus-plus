@@ -12,7 +12,7 @@ public:
     int add_subscriber(std::string_view, int);
     int remove_subscriber(std::string_view, int);
     int remove_all_subscriptions(int);
-    int publish(std::string_view, RespValue &);
+    int publish(std::string_view, const RespValue &, int);
 
 private:
     ConnectionManager &conn_mgr_;

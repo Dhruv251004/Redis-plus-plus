@@ -56,7 +56,7 @@ int PubSubManager::remove_all_subscriptions(int client_fd)
     return len;
 }
 
-int PubSubManager::publish(string_view topic, RespValue &resp)
+int PubSubManager::publish(string_view topic, const RespValue &resp, int publisher_fd)
 {
     string topic_str = string(topic);
     string serialize_msg = RespSerializer::serialize(resp);
@@ -69,7 +69,11 @@ int PubSubManager::publish(string_view topic, RespValue &resp)
     {
         Connection &conn = conn_mgr_.get(subscribers_fd);
         conn.append_write_data(serialize_msg);
-        conn_mgr_.notify_event(subscribers_fd, conn);
+
+        // The publisher is mid-way through handle_read_client; flushing it here could close and
+        // erase its Connection under the caller. handle_client flushes it right after.
+        if (subscribers_fd != publisher_fd)
+            conn_mgr_.notify_event(subscribers_fd, conn);
     }
     return clients.size();
 }
