@@ -20,7 +20,7 @@ constexpr int MAX_EVENTS = 64;
 
 const unordered_set<string> RedisServer::write_command_ = {"SET", "DEL", "EXPIRE", "EXPIREAT", "PEXPIREAT", "PERSIST"};
 
-RedisServer::RedisServer(int port) : tcp_server_(port), db_(), aof_(BASE_DB_PATH + "/" + AOF_FILE_NAME), command_executor_(db_, aof_), rdb_(BASE_DB_PATH + "/" + RDB_FILE_NAME), pub_sub_manager_(connection_manager_)
+RedisServer::RedisServer(int port) : tcp_server_(port), db_(), aof_(BASE_DB_PATH + "/" + AOF_FILE_NAME), pub_sub_manager_(connection_manager_), command_executor_(db_, pub_sub_manager_), rdb_(BASE_DB_PATH + "/" + RDB_FILE_NAME)
 {
     connection_manager_.set_notify_handler([this](int client_fd, Connection &conn)
                                            { handle_notify_event(client_fd, conn); });
@@ -204,7 +204,7 @@ bool RedisServer::handle_read_client(int client_fd, Connection &conn)
             }
 
             // persist in memeory
-            RespValue output_resp = command_executor_.execute(*input_resp);
+            RespValue output_resp = command_executor_.execute(*input_resp, client_fd);
 
             // persist in db
             persist_in_db(*input_resp, output_resp);
@@ -316,7 +316,7 @@ void RedisServer::handle_replay(string_view cmds)
             return;
         }
 
-        command_executor_.execute(*input_resp);
+        command_executor_.execute(*input_resp, -1);
         cmds.remove_prefix(consumed);
     }
 }

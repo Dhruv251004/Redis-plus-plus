@@ -36,7 +36,7 @@ private:
     ConnectionManager connection_manager_;
     Database db_;
     AOF aof_;
+    PubSubManager pub_sub_manager_;
     CommandExecutor command_executor_;
     RDB rdb_;
-    PubSubManager pub_sub_manager_;
 };

@@ -56,10 +56,15 @@ int PubSubManager::remove_all_subscriptions(int client_fd)
     return len;
 }
 
-int PubSubManager::publish(string_view topic, const RespValue &resp, int publisher_fd)
+int PubSubManager::subscription_count(int client_fd) const
+{
+    auto it = client_subs_list_.find(client_fd);
+    return it == client_subs_list_.end() ? 0 : static_cast<int>(it->second.size());
+}
+
+int PubSubManager::publish(string_view topic, string_view serialized_msg, int publisher_fd)
 {
     string topic_str = string(topic);
-    string serialize_msg = RespSerializer::serialize(resp);
     auto it = subscribers_.find(topic_str);
     if (it == subscribers_.end())
         return 0;
@@ -68,7 +73,7 @@ int PubSubManager::publish(string_view topic, const RespValue &resp, int publish
     for (auto subscribers_fd : clients)
     {
         Connection &conn = conn_mgr_.get(subscribers_fd);
-        conn.append_write_data(serialize_msg);
+        conn.append_write_data(serialized_msg);
 
         // The publisher is mid-way through handle_read_client; flushing it here could close and
         // erase its Connection under the caller. handle_client flushes it right after.

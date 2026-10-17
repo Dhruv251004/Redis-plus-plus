@@ -12,7 +12,8 @@ public:
     int add_subscriber(std::string_view, int);
     int remove_subscriber(std::string_view, int);
     int remove_all_subscriptions(int);
-    int publish(std::string_view, const RespValue &, int);
+    int subscription_count(int) const;
+    int publish(std::string_view, std::string_view, int);
 
 private:
     ConnectionManager &conn_mgr_;
