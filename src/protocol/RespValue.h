@@ -18,6 +18,7 @@ public:
         Null
     };
 
+    RespValue();
     RespValue(Type, string_view);
     static RespValue simple_string(string_view);
     static RespValue bulk_string(string_view);

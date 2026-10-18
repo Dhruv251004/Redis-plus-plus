@@ -27,7 +27,7 @@ CommandExecutor::CommandExecutor(Database &db, PubSubManager &pub_sub_manager) :
     };
 }
 
-RespValue CommandExecutor::execute(const RespValue &resp, int client_fd)
+RespValue CommandExecutor::execute(const RespValue &resp, Connection &conn)
 {
     if (resp.type() != RespValue::Type::Array)
         return RespValue::error("ERR expected array");
@@ -42,13 +42,60 @@ RespValue CommandExecutor::execute(const RespValue &resp, int client_fd)
 
     string cmdName = uppercase(cmd.data());
     auto it = command_map_.find(cmdName);
-    if (it == command_map_.end())
+    bool known = it != command_map_.end();
+
+    if (auto tx_res = handle_transaction(cmdName, resp, conn, known))
+        return *tx_res;
+
+    if (!known)
         return unknown_command(cmdName);
 
-    vector<RespValue> args(resp.children().begin() + 1, resp.children().end());
-    RespValue res = (this->*(it->second))(args, client_fd);
+    vector<RespValue> args(children.begin() + 1, children.end());
+    return (this->*(it->second))(args, conn.fd());
+}
 
-    return res;
+optional<RespValue> CommandExecutor::handle_transaction(const string &cmdName, const RespValue &resp, Connection &conn, bool known)
+{
+    if (cmdName == "MULTI")
+    {
+        if (conn.is_under_transaction())
+        {
+            conn.set_tx_dirty(true);
+            return RespValue::error("ERR MULTI calls can not be nested");
+        }
+        conn.set_transaction(true);
+        return RespValue::simple_string("OK");
+    }
+
+    if (cmdName == "DISCARD")
+    {
+        if (!conn.is_under_transaction())
+            return RespValue::error("ERR DISCARD without MULTI");
+
+        conn.set_transaction(false);
+        conn.clear_tx_queue();
+        return RespValue::simple_string("OK");
+    }
+
+    if (cmdName == "EXEC")
+    {
+        // will implemetn later
+        return nullopt;
+    }
+
+    if (conn.is_under_transaction())
+    {
+        if (!known)
+        {
+            conn.set_tx_dirty(true);
+            return unknown_command(cmdName);
+        }
+        conn.append_tx(resp);
+        return RespValue::simple_string("QUEUED");
+    }
+
+    // not a transaction concern, caller dispatches normally
+    return nullopt;
 }
 
 RespValue CommandExecutor::handle_ping(const vector<RespValue> &args, int)

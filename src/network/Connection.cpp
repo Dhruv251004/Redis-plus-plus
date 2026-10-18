@@ -2,7 +2,7 @@
 
 constexpr int COMPACT_THRESHOLD = 4096;
 
-Connection::Connection(int socket_fd) : socket_fd_(socket_fd), read_buffer_(""), read_buffer_offset_(0), write_buffer_(""), write_buffer_offset_(0), close_after_write_(false) {}
+Connection::Connection(int socket_fd) : socket_fd_(socket_fd), read_buffer_(""), read_buffer_offset_(0), write_buffer_(""), write_buffer_offset_(0), close_after_write_(false), is_transaction_in_progress(false) {}
 
 int Connection::fd() const
 {
@@ -81,4 +81,38 @@ void Connection::set_close_after_write(bool val)
 bool Connection::close_after_write() const
 {
     return close_after_write_;
+}
+
+void Connection::set_transaction(bool val)
+{
+    is_transaction_in_progress = val;
+}
+
+bool Connection::is_under_transaction() const
+{
+    return is_transaction_in_progress;
+}
+
+void Connection::append_tx(const RespValue &cmd)
+{
+    tx_queue_.commands.push_back(cmd);
+}
+void Connection::set_tx_dirty(bool val)
+{
+    tx_queue_.dirty = val;
+}
+bool Connection::is_tx_dirty() const
+{
+    return tx_queue_.dirty;
+}
+
+void Connection::clear_tx_queue()
+{
+    tx_queue_.commands.clear();
+    tx_queue_.dirty = false;
+}
+
+std::vector<RespValue> Connection::get_tx_queue() const
+{
+    return tx_queue_.commands;
 }

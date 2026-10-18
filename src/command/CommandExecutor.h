@@ -1,16 +1,18 @@
 #pragma once
 #include <unordered_map>
 #include <vector>
+#include <optional>
 #include "protocol/RespValue.h"
 #include "database/Database.h"
 #include "persistence/AOF.h"
 #include "pubsub/PubSubManager.h"
+#include "network/Connection.h"
 
 class CommandExecutor
 {
 public:
     CommandExecutor(Database &, PubSubManager &);
-    RespValue execute(const RespValue &, int client_fd);
+    RespValue execute(const RespValue &, Connection &);
 
 private:
     using Handler = RespValue (CommandExecutor::*)(const vector<RespValue> &, int);
@@ -32,6 +34,7 @@ private:
     RespValue handle_publish(const vector<RespValue> &, int);
     RespValue handle_subscribe(const vector<RespValue> &, int);
     RespValue handle_unsubscribe(const vector<RespValue> &, int);
+    optional<RespValue> handle_transaction(const string &, const RespValue &, Connection &, bool);
     RespValue unknown_command(string_view);
     RespValue wrong_arg_count(string_view);
     RespValue syntax_error();

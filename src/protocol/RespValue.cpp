@@ -2,6 +2,8 @@
 #include "RespValue.h"
 using namespace std;
 
+RespValue::RespValue() : type_(RespValue::Type::Null) {};
+
 RespValue::RespValue(Type type, string_view data) : type_(type), data_(data) {}
 
 RespValue RespValue::simple_string(string_view s)

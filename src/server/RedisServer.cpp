@@ -204,7 +204,7 @@ bool RedisServer::handle_read_client(int client_fd, Connection &conn)
             }
 
             // persist in memeory
-            RespValue output_resp = command_executor_.execute(*input_resp, client_fd);
+            RespValue output_resp = command_executor_.execute(*input_resp, conn);
 
             // persist in db
             persist_in_db(*input_resp, output_resp);
@@ -302,6 +302,7 @@ bool RedisServer::handle_write_client(int client_fd, Connection &conn)
 
 void RedisServer::handle_replay(string_view cmds)
 {
+    Connection replay_conn(-1);
     while (cmds.size() > 0)
     {
         auto [parse_status, input_resp, consumed] = RespParser::parse(cmds);
@@ -316,7 +317,7 @@ void RedisServer::handle_replay(string_view cmds)
             return;
         }
 
-        command_executor_.execute(*input_resp, -1);
+        command_executor_.execute(*input_resp, replay_conn);
         cmds.remove_prefix(consumed);
     }
 }
