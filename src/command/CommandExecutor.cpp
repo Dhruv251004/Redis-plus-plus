@@ -79,8 +79,24 @@ optional<RespValue> CommandExecutor::handle_transaction(const string &cmdName, c
 
     if (cmdName == "EXEC")
     {
-        // will implemetn later
-        return nullopt;
+        if (!conn.is_under_transaction())
+            return RespValue::error("ERR EXEC without MULTI");
+
+        if (conn.is_tx_dirty())
+        {
+            conn.set_transaction(false);
+            conn.clear_tx_queue();
+            return RespValue::error("EXECABORT Transaction discarded because of previous errors.");
+        }
+
+        auto queued = conn.get_tx_queue();
+        conn.set_transaction(false);
+        conn.clear_tx_queue(); // clear first so the replayed commands aren't re-queued
+
+        vector<RespValue> results;
+        for (const auto &c : queued)
+            results.push_back(execute(c, conn));
+        return RespValue::array(results);
     }
 
     if (conn.is_under_transaction())
