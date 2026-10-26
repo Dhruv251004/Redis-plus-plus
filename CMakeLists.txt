@@ -52,3 +52,20 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         -Werror
     )
 endif()
+
+
+enable_testing()
+
+find_package(GTest REQUIRED)
+
+add_executable(db_tests
+    tests/db_tests.cpp
+    src/database/Database.cpp
+    src/utility/TimeUtils.cpp
+)
+
+target_include_directories(db_tests PRIVATE src)
+target_link_libraries(db_tests PRIVATE GTest::gtest_main)
+
+include(GoogleTest)
+gtest_discover_tests(db_tests)
