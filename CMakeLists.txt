@@ -67,5 +67,15 @@ add_executable(db_tests
 target_include_directories(db_tests PRIVATE src)
 target_link_libraries(db_tests PRIVATE GTest::gtest_main)
 
+add_executable(resp_parser_tests
+    tests/resp_parser_tests.cpp
+    src/protocol/RespParser.cpp
+    src/protocol/RespValue.cpp
+)
+
+target_include_directories(resp_parser_tests PRIVATE src)
+target_link_libraries(resp_parser_tests PRIVATE GTest::gtest_main)
+
 include(GoogleTest)
 gtest_discover_tests(db_tests)
+gtest_discover_tests(resp_parser_tests)
