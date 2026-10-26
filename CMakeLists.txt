@@ -76,6 +76,17 @@ add_executable(resp_parser_tests
 target_include_directories(resp_parser_tests PRIVATE src)
 target_link_libraries(resp_parser_tests PRIVATE GTest::gtest_main)
 
+add_executable(resp_serializer_tests
+    tests/resp_serializer_tests.cpp
+    src/protocol/RespSerializer.cpp
+    src/protocol/RespParser.cpp
+    src/protocol/RespValue.cpp
+)
+
+target_include_directories(resp_serializer_tests PRIVATE src)
+target_link_libraries(resp_serializer_tests PRIVATE GTest::gtest_main)
+
 include(GoogleTest)
+gtest_discover_tests(resp_serializer_tests)
 gtest_discover_tests(db_tests)
 gtest_discover_tests(resp_parser_tests)
