@@ -102,7 +102,38 @@ add_executable(command_executor_tests
 target_include_directories(command_executor_tests PRIVATE src)
 target_link_libraries(command_executor_tests PRIVATE GTest::gtest_main spdlog::spdlog)
 
+add_executable(byte_buffer_tests
+    tests/byte_buffer_tests.cpp
+    src/persistence/ByteBuffer.cpp
+)
+
+target_include_directories(byte_buffer_tests PRIVATE src)
+target_link_libraries(byte_buffer_tests PRIVATE GTest::gtest_main ZLIB::ZLIB)
+
+add_executable(aof_tests
+    tests/aof_tests.cpp
+    src/persistence/AOF.cpp
+)
+
+target_include_directories(aof_tests PRIVATE src)
+target_link_libraries(aof_tests PRIVATE GTest::gtest_main spdlog::spdlog)
+
+add_executable(rdb_tests
+    tests/rdb_tests.cpp
+    src/persistence/RDB.cpp
+    src/persistence/ByteBuffer.cpp
+    src/database/Database.cpp
+    src/utility/TimeUtils.cpp
+    src/utility/Types.cpp
+)
+
+target_include_directories(rdb_tests PRIVATE src)
+target_link_libraries(rdb_tests PRIVATE GTest::gtest_main ZLIB::ZLIB spdlog::spdlog)
+
 include(GoogleTest)
+gtest_discover_tests(byte_buffer_tests)
+gtest_discover_tests(aof_tests)
+gtest_discover_tests(rdb_tests)
 gtest_discover_tests(command_executor_tests)
 gtest_discover_tests(resp_serializer_tests)
 gtest_discover_tests(db_tests)
