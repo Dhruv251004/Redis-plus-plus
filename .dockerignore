@@ -1,0 +1,6 @@
+.git
+.venv
+.vscode
+build
+Testing
+data
