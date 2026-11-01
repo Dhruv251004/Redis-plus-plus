@@ -34,6 +34,7 @@ add_executable(redispp
     src/persistence/AOF.cpp
     src/persistence/ByteBuffer.cpp
     src/persistence/RDB.cpp
+    src/persistence/AofEntry.cpp
     src/utility/Types.cpp
 )
 
@@ -130,7 +131,26 @@ add_executable(rdb_tests
 target_include_directories(rdb_tests PRIVATE src)
 target_link_libraries(rdb_tests PRIVATE GTest::gtest_main ZLIB::ZLIB spdlog::spdlog)
 
+add_executable(aof_entry_tests
+    tests/aof_entry_tests.cpp
+    src/persistence/AofEntry.cpp
+    src/command/CommandExecutor.cpp
+    src/network/Connection.cpp
+    src/server/ConnectionManager.cpp
+    src/pubsub/PubSubManager.cpp
+    src/protocol/RespSerializer.cpp
+    src/protocol/RespParser.cpp
+    src/protocol/RespValue.cpp
+    src/database/Database.cpp
+    src/utility/TimeUtils.cpp
+    src/utility/StringUtils.cpp
+)
+
+target_include_directories(aof_entry_tests PRIVATE src)
+target_link_libraries(aof_entry_tests PRIVATE GTest::gtest_main spdlog::spdlog)
+
 include(GoogleTest)
+gtest_discover_tests(aof_entry_tests)
 gtest_discover_tests(byte_buffer_tests)
 gtest_discover_tests(aof_tests)
 gtest_discover_tests(rdb_tests)

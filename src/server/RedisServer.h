@@ -23,13 +23,12 @@ public:
 
     void handle_replay(string_view);
     void handle_notify_event(int, Connection &);
-    static bool is_write_command(const string &);
-    void persist_in_db(const RespValue &, const RespValue &);
+    void persist_in_db(const RespValue &);
+    void purge_expired_keys();
     bool save_snapshot();
     bool add_timer();
 
 private:
-    static const unordered_set<string> write_command_;
     int epoll_fd_;
     int timer_fd_;
     TcpServer tcp_server_;

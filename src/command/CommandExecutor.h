@@ -1,5 +1,7 @@
 #pragma once
+#include <functional>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <optional>
 #include "protocol/RespValue.h"
@@ -11,14 +13,26 @@
 class CommandExecutor
 {
 public:
+    // Fired after a write changes the db. Queued or failed commands never fire it.
+    // An EXEC fires MULTI, each write, then EXEC (nothing if no write changed anything).
+    using WriteObserver = std::function<void(const RespValue &command, const RespValue &result)>;
+
     CommandExecutor(Database &, PubSubManager &);
     RespValue execute(const RespValue &, Connection &);
+    void set_write_observer(WriteObserver);
 
 private:
     using Handler = RespValue (CommandExecutor::*)(const vector<RespValue> &, int);
     unordered_map<string, Handler> command_map_;
     Database &db_;
     PubSubManager &pub_sub_manager_;
+    WriteObserver write_observer_;
+    bool in_exec_ = false;
+    bool exec_logged_ = false; // MULTI already sent to the observer for this EXEC
+
+    static const unordered_set<string> write_commands_;
+    static bool changed_data(const string &, const RespValue &);
+    void notify_write(const RespValue &, const RespValue &);
 
     RespValue handle_ping(const vector<RespValue> &, int);
     RespValue handle_echo(const vector<RespValue> &, int);

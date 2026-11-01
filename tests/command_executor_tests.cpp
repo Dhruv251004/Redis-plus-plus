@@ -453,3 +453,190 @@ TEST_F(CommandExecutorTest, PublisherThatIsSubscribedGetsMessageWithoutNotify)
     EXPECT_TRUE(conn_mgr.get(CLIENT_FD).has_write_data());
     EXPECT_TRUE(notified_fds.empty());
 }
+
+// ---------- write observer (feeds the AOF) ----------
+
+namespace
+{
+std::string describe(const RespValue &command)
+{
+    std::string text;
+    for (const auto &part : command.children())
+        text += (text.empty() ? "" : " ") + part.data();
+    return text;
+}
+} // namespace
+
+class WriteObserverTest : public CommandExecutorTest
+{
+protected:
+    void SetUp() override
+    {
+        CommandExecutorTest::SetUp();
+        executor.set_write_observer([this](const RespValue &command, const RespValue &)
+                                    { logged.push_back(describe(command)); });
+    }
+
+    std::vector<std::string> logged;
+};
+
+using Log = std::vector<std::string>;
+
+TEST_F(WriteObserverTest, PlainWriteIsReported)
+{
+    run({"SET", "k", "v"});
+    EXPECT_EQ(logged, (Log{"SET k v"}));
+}
+
+TEST_F(WriteObserverTest, EachEffectiveWriteCommandIsReported)
+{
+    run({"SET", "k", "v"});
+    run({"EXPIRE", "k", "100"});
+    run({"PERSIST", "k"});
+    run({"EXPIREAT", "k", "9999999999"});
+    run({"PEXPIREAT", "k", "9999999999000"});
+    run({"DEL", "k"});
+
+    EXPECT_EQ(logged, (Log{"SET k v", "EXPIRE k 100", "PERSIST k", "EXPIREAT k 9999999999",
+                           "PEXPIREAT k 9999999999000", "DEL k"}));
+}
+
+TEST_F(WriteObserverTest, ReadOnlyCommandsAreNotReported)
+{
+    run({"SET", "k", "v"});
+    logged.clear();
+
+    run({"GET", "k"});
+    run({"EXISTS", "k"});
+    run({"TTL", "k"});
+    run({"PING"});
+    run({"ECHO", "x"});
+    EXPECT_TRUE(logged.empty());
+}
+
+TEST_F(WriteObserverTest, FailedWritesAreNotReported)
+{
+    run({"SET", "k", "v", "EX", "abc"});
+    run({"SET", "k"});
+    run({"EXPIRE", "k", "soon"});
+    EXPECT_TRUE(logged.empty());
+}
+
+TEST_F(WriteObserverTest, WritesThatChangeNothingAreNotReported)
+{
+    run({"DEL", "missing"});
+    run({"EXPIRE", "missing", "100"});
+    run({"PERSIST", "missing"});
+
+    run({"SET", "k", "v"});
+    logged.clear();
+    run({"PERSIST", "k"}); // has no expiry to remove
+    EXPECT_TRUE(logged.empty());
+}
+
+TEST_F(WriteObserverTest, ObserverRunsAfterTheDatabaseChanged)
+{
+    std::optional<std::string> seen;
+    executor.set_write_observer([&](const RespValue &, const RespValue &)
+                                { seen = db.get("k"); });
+
+    run({"SET", "k", "v"});
+    EXPECT_EQ(seen, "v");
+}
+
+// ---------- write observer: transactions ----------
+
+TEST_F(WriteObserverTest, QueuedWritesAreReportedOnlyAtExecBracketedByMultiExec)
+{
+    run({"MULTI"});
+    run({"SET", "a", "1"});
+    run({"SET", "b", "2"});
+    EXPECT_TRUE(logged.empty());
+
+    run({"EXEC"});
+    EXPECT_EQ(logged, (Log{"MULTI", "SET a 1", "SET b 2", "EXEC"}));
+}
+
+TEST_F(WriteObserverTest, DiscardedTransactionReportsNothing)
+{
+    run({"MULTI"});
+    run({"SET", "a", "1"});
+    run({"DISCARD"});
+    EXPECT_TRUE(logged.empty());
+}
+
+TEST_F(WriteObserverTest, AbortedTransactionReportsNothing)
+{
+    run({"MULTI"});
+    run({"SET", "a", "1"});
+    run({"FLY"});
+    run({"EXEC"});
+    EXPECT_TRUE(logged.empty());
+}
+
+TEST_F(WriteObserverTest, ReadOnlyTransactionReportsNothing)
+{
+    run({"SET", "k", "v"});
+    logged.clear();
+
+    run({"MULTI"});
+    run({"GET", "k"});
+    run({"EXEC"});
+    EXPECT_TRUE(logged.empty());
+}
+
+TEST_F(WriteObserverTest, TransactionWhoseWritesAllFailReportsNothing)
+{
+    run({"MULTI"});
+    run({"SET", "d", "4", "EX", "notint"});
+    run({"DEL", "missing"});
+    run({"EXEC"});
+    EXPECT_TRUE(logged.empty());
+}
+
+TEST_F(WriteObserverTest, OnlyTheWritesThatSucceededInsideExecAreReported)
+{
+    run({"MULTI"});
+    run({"SET", "a", "1"});
+    run({"SET", "b", "2", "EX", "notint"}); // fails when run
+    run({"DEL", "missing"});                // changes nothing
+    run({"EXPIRE", "a", "100"});
+    run({"EXEC"});
+
+    EXPECT_EQ(logged, (Log{"MULTI", "SET a 1", "EXPIRE a 100", "EXEC"}));
+}
+
+TEST_F(WriteObserverTest, EachTransactionIsBracketedSeparately)
+{
+    run({"MULTI"});
+    run({"SET", "a", "1"});
+    run({"EXEC"});
+    run({"MULTI"});
+    run({"SET", "b", "2"});
+    run({"EXEC"});
+
+    EXPECT_EQ(logged, (Log{"MULTI", "SET a 1", "EXEC", "MULTI", "SET b 2", "EXEC"}));
+}
+
+TEST_F(WriteObserverTest, WriteAfterExecIsNotBracketed)
+{
+    run({"MULTI"});
+    run({"SET", "a", "1"});
+    run({"EXEC"});
+    logged.clear();
+
+    run({"SET", "b", "2"});
+    EXPECT_EQ(logged, (Log{"SET b 2"}));
+}
+
+TEST_F(WriteObserverTest, EmptyTransactionAfterABusyOneReportsNothing)
+{
+    run({"MULTI"});
+    run({"SET", "a", "1"});
+    run({"EXEC"});
+    logged.clear();
+
+    run({"MULTI"});
+    run({"EXEC"});
+    EXPECT_TRUE(logged.empty());
+}

@@ -7,6 +7,8 @@
 #include "pubsub/PubSubManager.h"
 using namespace std;
 
+const unordered_set<string> CommandExecutor::write_commands_ = {"SET", "DEL", "EXPIRE", "EXPIREAT", "PEXPIREAT", "PERSIST"};
+
 CommandExecutor::CommandExecutor(Database &db, PubSubManager &pub_sub_manager) : db_(db), pub_sub_manager_(pub_sub_manager)
 {
     command_map_ = {
@@ -51,7 +53,40 @@ RespValue CommandExecutor::execute(const RespValue &resp, Connection &conn)
         return unknown_command(cmdName);
 
     vector<RespValue> args(children.begin() + 1, children.end());
-    return (this->*(it->second))(args, conn.fd());
+    RespValue result = (this->*(it->second))(args, conn.fd());
+
+    if (write_commands_.count(cmdName) && changed_data(cmdName, result))
+        notify_write(resp, result);
+    return result;
+}
+
+void CommandExecutor::set_write_observer(WriteObserver observer)
+{
+    write_observer_ = std::move(observer);
+}
+
+// Integer replies of 0 (DEL, EXPIRE, PERSIST...) mean nothing changed.
+bool CommandExecutor::changed_data(const string &cmdName, const RespValue &result)
+{
+    if (result.is_error())
+        return false;
+    if (cmdName == "SET")
+        return true;
+    return result.type() == RespValue::Type::Integer && result.data() != "0";
+}
+
+void CommandExecutor::notify_write(const RespValue &command, const RespValue &result)
+{
+    if (!write_observer_)
+        return;
+
+    // bracket an EXEC's writes in MULTI/EXEC so a replay applies all or none
+    if (in_exec_ && !exec_logged_)
+    {
+        write_observer_(RespValue::array({RespValue::bulk_string("MULTI")}), RespValue::simple_string("OK"));
+        exec_logged_ = true;
+    }
+    write_observer_(command, result);
 }
 
 optional<RespValue> CommandExecutor::handle_transaction(const string &cmdName, const RespValue &resp, Connection &conn, bool known)
@@ -94,9 +129,17 @@ optional<RespValue> CommandExecutor::handle_transaction(const string &cmdName, c
         conn.clear_tx_queue(); // clear first so the replayed commands aren't re-queued
 
         vector<RespValue> results;
+        in_exec_ = true;
+        exec_logged_ = false;
         for (const auto &c : queued)
             results.push_back(execute(c, conn));
-        return RespValue::array(results);
+        in_exec_ = false;
+
+        RespValue reply = RespValue::array(results);
+        if (exec_logged_)
+            write_observer_(RespValue::array({RespValue::bulk_string("EXEC")}), reply);
+        exec_logged_ = false;
+        return reply;
     }
 
     if (conn.is_under_transaction())

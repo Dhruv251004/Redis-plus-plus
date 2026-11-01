@@ -1,4 +1,5 @@
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <iostream>
 #include <spdlog/spdlog.h>
@@ -9,6 +10,7 @@
 #include "command/CommandExecutor.h"
 #include "protocol/RespSerializer.h"
 #include "protocol/ParseResult.h"
+#include "persistence/AofEntry.h"
 #include "database/Database.h"
 #include "utility/StringUtils.h"
 #include "utility/RedisPlusPlus.h"
@@ -17,8 +19,9 @@
 using namespace std;
 
 constexpr int MAX_EVENTS = 64;
-
-const unordered_set<string> RedisServer::write_command_ = {"SET", "DEL", "EXPIRE", "EXPIREAT", "PEXPIREAT", "PERSIST"};
+constexpr int EXPIRE_CYCLE_MS = 100;
+constexpr size_t EXPIRE_BATCH = 1000;
+constexpr auto EXPIRE_TIME_BUDGET = chrono::milliseconds(5);
 
 RedisServer::RedisServer(int port) : tcp_server_(port), db_(), aof_(BASE_DB_PATH + "/" + AOF_FILE_NAME), pub_sub_manager_(connection_manager_), command_executor_(db_, pub_sub_manager_), rdb_(BASE_DB_PATH + "/" + RDB_FILE_NAME)
 {
@@ -54,6 +57,10 @@ void RedisServer::start()
                 { handle_replay(cmd); });
     spdlog::info("[RedisServer.cpp::RedisServer::start] aof replay finished, {} keys in db", db_.get_db_size());
 
+    // installed after replay so replayed commands aren't logged again
+    command_executor_.set_write_observer([this](const RespValue &command, const RespValue &)
+                                         { persist_in_db(command); });
+
     // Create epoll instance
     epoll_fd_ = epoll_create1(0);
     if (epoll_fd_ == -1)
@@ -83,10 +90,11 @@ void RedisServer::start()
     spdlog::info("[RedisServer.cpp::RedisServer::start] server ready to accept connections");
 
     vector<epoll_event> events(MAX_EVENTS);
+    auto last_expire_cycle = chrono::steady_clock::now();
 
     while (true)
     {
-        int num_events = epoll_wait(epoll_fd_, events.data(), MAX_EVENTS, -1);
+        int num_events = epoll_wait(epoll_fd_, events.data(), MAX_EVENTS, EXPIRE_CYCLE_MS);
         if (num_events == -1)
         {
             if (errno == EINTR)
@@ -138,6 +146,12 @@ void RedisServer::start()
             {
                 handle_client(current_fd, events[i].events);
             }
+        }
+
+        if (chrono::steady_clock::now() - last_expire_cycle >= chrono::milliseconds(EXPIRE_CYCLE_MS))
+        {
+            purge_expired_keys();
+            last_expire_cycle = chrono::steady_clock::now();
         }
     }
 }
@@ -203,11 +217,7 @@ bool RedisServer::handle_read_client(int client_fd, Connection &conn)
                 return true;
             }
 
-            // persist in memeory
             RespValue output_resp = command_executor_.execute(*input_resp, conn);
-
-            // persist in db
-            persist_in_db(*input_resp, output_resp);
             string output_msg = RespSerializer::serialize(output_resp);
 
             // remove from read and append to write
@@ -322,46 +332,31 @@ void RedisServer::handle_replay(string_view cmds)
     }
 }
 
-bool RedisServer::is_write_command(const string &cmd)
-{
-    return write_command_.find(cmd) != write_command_.end();
-}
-
 void RedisServer::stop()
 {
     tcp_server_.stop();
 }
 
-void RedisServer::persist_in_db(const RespValue &input, const RespValue &output)
+void RedisServer::persist_in_db(const RespValue &command)
 {
-    if (output.type() == RespValue::Type::Error)
-        return;
-
-    const auto &args = input.children();
-    string cmdName = uppercase(args[0].data());
-    if (!is_write_command(cmdName))
-        return;
-
-    string entry;
-    if (cmdName == "EXPIRE" || (cmdName == "SET" && args.size() > 3))
-    {
-        if (cmdName == "SET")
-            entry = RespSerializer::serialize(RespValue::array(
-                {RespValue::bulk_string("SET"), args[1], args[2]}));
-
-        auto deadline = db_.ttl(args[1].data());
-        if (deadline.has_value() && *deadline != NO_EXPIRY)
-            entry += RespSerializer::serialize(RespValue::array(
-                {RespValue::bulk_string("PEXPIREAT"), args[1],
-                 RespValue::bulk_string(to_string(*deadline))}));
-    }
-    else
-    {
-        entry = RespSerializer::serialize(input);
-    }
-
+    string entry = aof_entry_for(command, db_);
     if (!aof_.append(entry))
-        spdlog::error("[RedisServer.cpp::RedisServer::persist_in_db] failed to append {} command to aof, it will be lost on restart", cmdName);
+        spdlog::error("[RedisServer.cpp::RedisServer::persist_in_db] failed to append {} command to aof, it will be lost on restart", uppercase(command.children()[0].data()));
+}
+
+void RedisServer::purge_expired_keys()
+{
+    auto start = chrono::steady_clock::now();
+    size_t total = 0;
+    size_t removed;
+    do
+    {
+        removed = db_.purge_expired(EXPIRE_BATCH);
+        total += removed;
+    } while (removed == EXPIRE_BATCH && chrono::steady_clock::now() - start < EXPIRE_TIME_BUDGET);
+
+    if (total > 0)
+        spdlog::debug("[RedisServer.cpp::RedisServer::purge_expired_keys] removed {} expired keys", total);
 }
 
 bool RedisServer::save_snapshot()
